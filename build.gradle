@@ -1,9 +1,10 @@
 buildscript {
     ext {
-        compileSdk = 31
+        compileSdk = 34
         minSdk = 24
         targetSdk = 31
-
+        gradle_version = '8.0.2'
+        android_gradle_plugin_version = '8.0.2'
         kotlin_version = '1.6.21'
         kotlinx_coroutines_version = '1.5.2'
         lifecycle_runtime_ktx_version = '2.4.1'
@@ -23,11 +24,16 @@ buildscript {
     }
     repositories {
         google()
+        maven {
+            // r8 maven
+            url = uri("https://storage.googleapis.com/r8-releases/raw")
+        }
         mavenLocal()
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:7.2.0'
+        classpath("com.android.tools:r8:8.2.16-dev")
+        classpath 'com.android.tools.build:gradle:7.2.2'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
         // Maven Central Publish
         classpath "com.vanniktech:gradle-maven-publish-plugin:0.18.0"

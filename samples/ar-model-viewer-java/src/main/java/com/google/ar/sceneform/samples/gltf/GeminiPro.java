@@ -11,8 +11,6 @@ import com.google.ai.client.generativeai.type.GenerateContentResponse;
 import com.google.ai.client.generativeai.type.GenerationConfig;
 import com.google.ai.client.generativeai.type.HarmCategory;
 import com.google.ai.client.generativeai.type.SafetySetting;
-import com.google.ar.sceneform.samples.gltf.BuildConfig;
-import com.google.ar.sceneform.samples.gltf.ResponseCallback;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -49,7 +47,7 @@ public class GeminiPro {
     }
 
     public GenerativeModelFutures getModel(){
-        String apiKey = BuildConfig.apiKey;
+        String apiKey = BuildConfig2.apiKey;
 
         SafetySetting harrassmentSafety = new SafetySetting(HarmCategory.HARASSMENT,
                 BlockThreshold.ONLY_HIGH);
