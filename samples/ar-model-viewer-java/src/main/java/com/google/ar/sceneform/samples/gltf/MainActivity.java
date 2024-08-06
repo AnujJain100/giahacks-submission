@@ -169,6 +169,7 @@ public class MainActivity extends AppCompatActivity implements
                         .commit();
             }
         }
+        /*
         arCoreSwitch = findViewById(R.id.arcore_switch);
         arCoreSwitch.setOnCheckedChangeListener(
                 (view, checked) -> {
@@ -190,6 +191,8 @@ public class MainActivity extends AppCompatActivity implements
         drawerLayout = findViewById(R.id.drawer_layout);
         NavigationView navigationView = findViewById(R.id.nav_view);
 
+
+         */
         FloatingActionButton fabToggleDrawer = findViewById(R.id.fab_toggle_drawer);
         fabToggleDrawer.setOnClickListener(new View.OnClickListener() {
             @Override
