@@ -7,13 +7,7 @@
     android:id="@+id/drawer_layout"
     tools:openDrawer="start"
     tools:context=".MainActivity">
-    <LinearLayout
-        android:id="@+id/chatResponseLayout"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical">
 
-    </LinearLayout>
     <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent">
@@ -75,8 +69,7 @@
             android:layout_gravity="bottom|start"
             android:layout_margin="12dp"
             android:src="@drawable/ic_baseline_add_24"
-            app:tint="@android:color/white" />
-
+            app:tint="@color/lavender" />
     </RelativeLayout>
 
     <com.google.android.material.navigation.NavigationView
@@ -84,7 +77,21 @@
         android:layout_height="match_parent"
         android:id="@+id/nav_view"
         android:layout_gravity="start"
-        app:itemIconTint="#FFFFFF"
-        app:itemTextColor="#000000"/>
+        app:itemIconTint="@color/lavender"
+        app:itemTextColor="@color/lavender">
 
+        <ScrollView
+            android:id="@+id/scrollView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_weight="1">
+
+            <LinearLayout
+                android:id="@+id/chatResponseLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp" />
+        </ScrollView>
+    </com.google.android.material.navigation.NavigationView>
 </androidx.drawerlayout.widget.DrawerLayout>

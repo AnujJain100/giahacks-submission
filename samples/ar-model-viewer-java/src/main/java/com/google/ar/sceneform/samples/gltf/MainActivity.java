@@ -7,6 +7,7 @@ import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
+import android.graphics.Matrix;
 
 import com.google.ai.client.generativeai.java.ChatFutures;
 import com.google.ai.client.generativeai.java.GenerativeModelFutures;
@@ -111,7 +112,6 @@ public class MainActivity extends AppCompatActivity implements
     private boolean isListening = false;
     private LinearLayout chatBodyContainer;
     private ChatFutures chatModel;
-
     private boolean arMode = true; // Track whether we're in AR mode
     // Base pose detector with streaming frames, when depending on the pose-detection sdk
     PoseDetectorOptions options =
@@ -301,6 +301,7 @@ public class MainActivity extends AppCompatActivity implements
             startCamera();
         } else {
             textureView.setSurfaceTextureListener(textureListener);
+
         }
     }
 
@@ -423,6 +424,8 @@ public class MainActivity extends AppCompatActivity implements
         @Override
         public void onSurfaceTextureAvailable(@NonNull SurfaceTexture surface, int width, int height) {
             startCamera();
+            configureTransform(width, height);
+
         }
 
         @Override
@@ -531,6 +534,29 @@ public class MainActivity extends AppCompatActivity implements
 
 
         return modelFutures.startChat();
+    }
+    private void configureTransform(int viewWidth, int viewHeight) {
+        if (textureView == null) return;
+
+        Matrix matrix = new Matrix();
+        float viewRatio = (float) viewWidth / (float) viewHeight;
+        float previewRatio = (float) textureView.getWidth() / (float) textureView.getHeight();
+
+        if (viewRatio > previewRatio) {
+            float scale = (float) viewHeight / (float) textureView.getHeight();
+            matrix.setScale(scale, scale);
+            float dx = (viewWidth - textureView.getWidth() * scale) / 2;
+            matrix.postTranslate(dx, 0);
+        } else {
+            float scale = (float) viewWidth / (float) textureView.getWidth();
+            matrix.setScale(scale, scale);
+            float dy = (viewHeight - textureView.getHeight() * scale) / 2;
+            matrix.postTranslate(0, dy);
+        }
+
+        // Rotate the TextureView if needed
+        matrix.postRotate(90, textureView.getWidth() / 2f, textureView.getHeight() / 2f);
+        textureView.setTransform(matrix);
     }
 
 
