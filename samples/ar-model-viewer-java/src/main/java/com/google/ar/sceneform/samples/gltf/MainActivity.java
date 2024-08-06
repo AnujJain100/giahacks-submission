@@ -7,6 +7,9 @@ import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
+
+import com.google.ai.client.generativeai.java.ChatFutures;
+import com.google.ai.client.generativeai.java.GenerativeModelFutures;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
@@ -43,6 +46,7 @@ import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -78,6 +82,7 @@ import com.google.ar.sceneform.ux.TransformableNode;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity implements
         FragmentOnAttachListener,
@@ -87,7 +92,7 @@ public class MainActivity extends AppCompatActivity implements
         ImageReader.OnImageAvailableListener{
     private InputImage inputImage;
     private String userQueryFromSpeech;
-
+    private TextToSpeech tts;
     private SpeechRecognizer speechRecognizer;
     private TextView ttsTextView;
     private TextView geminiResponse;
@@ -103,6 +108,9 @@ public class MainActivity extends AppCompatActivity implements
     private Switch arCoreSwitch;
     ArrayList<Pose> poseArrayList = new ArrayList<>();
     private DrawerLayout drawerLayout;
+    private boolean isListening = false;
+    private LinearLayout chatBodyContainer;
+    private ChatFutures chatModel;
 
     private boolean arMode = true; // Track whether we're in AR mode
     // Base pose detector with streaming frames, when depending on the pose-detection sdk
@@ -144,7 +152,16 @@ public class MainActivity extends AppCompatActivity implements
         getSupportFragmentManager().addFragmentOnAttachListener(this);
         textureView = findViewById(R.id.camera_preview);
         ttsTextView = findViewById(R.id.ttsTextView);
-
+        chatBodyContainer = findViewById(R.id.chatResponseLayout);
+        chatModel = getChatModel();
+        tts = new TextToSpeech(this, new TextToSpeech.OnInitListener() {
+            @Override
+            public void onInit(int i) {
+                if (i != TextToSpeech.ERROR) {
+                    tts.setLanguage(Locale.US);
+                }
+            }
+        });
         if (savedInstanceState == null) {
             if (Sceneform.isSupported(this)) {
                 getSupportFragmentManager().beginTransaction()
@@ -184,6 +201,88 @@ public class MainActivity extends AppCompatActivity implements
                 }
             }
         });
+        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
+        speechRecognizer.setRecognitionListener(new RecognitionListener() {
+            @Override
+            public void onReadyForSpeech(Bundle params) {}
+
+
+            @Override
+            public void onBeginningOfSpeech() {
+
+
+            }
+
+
+            @Override
+            public void onRmsChanged(float rmsdB) {}
+
+
+            @Override
+            public void onBufferReceived(byte[] buffer) {}
+
+
+            @Override
+            public void onEndOfSpeech() {
+
+                isListening = false;
+                micButton.setImageResource(R.drawable.mic_green);
+
+            }
+
+
+            @Override
+            public void onError(int error) {
+                isListening = false;
+                micButton.setImageResource(R.drawable.mic_green);
+                ttsTextView.setText("Error: " + error);
+            }
+
+            @Override
+            public void onResults(Bundle results) {
+
+                ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                if (matches != null && !matches.isEmpty()) {
+                    ttsTextView.setText(matches.get(0));
+                    userQueryFromSpeech = matches.get(0);
+                    String query = userQueryFromSpeech;
+                    //userQuery.setText("");
+                    populateChatBody("You", query);
+
+
+                    GeminiPro.getResponse(chatModel, query, latestBitmap, new ResponseCallback() {
+                        @Override
+                        public void onResponse(String response) {
+
+                            populateChatBody("Gemini", response);
+                            tts.speak(response, TextToSpeech.QUEUE_ADD, null);
+                        }
+
+
+                        @Override
+                        public void onError(Throwable throwable) {
+                            populateChatBody("Gemini", "Sorry, I'm having trouble understanding that. Please try again.");
+                        }
+                    });
+                } else {
+                    ttsTextView.setText("No speech recognized");
+                }
+
+                isListening = false;
+                micButton.setImageResource(R.drawable.mic_green);
+            }
+
+
+            @Override
+            public void onPartialResults(Bundle partialResults) {}
+
+
+            @Override
+            public void onEvent(int eventType, Bundle params) {}
+        });
+        //startCamera();
+//        querySubmitButton.setOnClickListener(v -> {
+//        });
 
     }
 
@@ -408,6 +507,30 @@ public class MainActivity extends AppCompatActivity implements
         }
 
 
+    }
+    public void populateChatBody(String userName, String message) {
+        LayoutInflater inflater = (LayoutInflater) getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+        View view = inflater.inflate(R.layout.chat_message_block, null);
+
+
+        TextView userAgentName = view.findViewById(R.id.userAgentNameTextView);
+        TextView userAgentMessage = view.findViewById(R.id.userAgentMessageTextView);
+
+
+        userAgentName.setText(userName);
+        userAgentMessage.setText (message);
+
+
+        chatBodyContainer.addView(view);
+        ScrollView scrollView = findViewById(R.id.scrollView);
+        scrollView.post(() -> scrollView.fullScroll(View.FOCUS_DOWN));
+    }
+    private ChatFutures getChatModel(){
+        GeminiPro model = new GeminiPro();
+        GenerativeModelFutures modelFutures = model.getModel();
+
+
+        return modelFutures.startChat();
     }
 
 
