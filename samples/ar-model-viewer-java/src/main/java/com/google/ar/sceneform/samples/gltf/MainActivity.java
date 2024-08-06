@@ -1,8 +1,19 @@
 package com.google.ar.sceneform.samples.gltf;
 
+import static android.app.PendingIntent.getActivity;
 import static com.google.ar.sceneform.rendering.HeadlessEngineWrapper.TAG;
+import com.google.ar.sceneform.ux.VideoNode;
+import com.google.ar.sceneform.rendering.Color;
+import java.util.ArrayList;
+import java.util.List;
 
+import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
+import android.graphics.RectF;
+import android.media.MediaPlayer;
+import android.os.Handler;
+import android.os.HandlerThread;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
@@ -42,6 +53,8 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.TextureView;
@@ -92,6 +105,8 @@ public class MainActivity extends AppCompatActivity implements
         ArFragment.OnViewCreatedListener,
         ImageReader.OnImageAvailableListener{
     private InputImage inputImage;
+    private final List<MediaPlayer> mediaPlayers = new ArrayList<>();
+    private int mode = R.id.menuPlainVideo;
     private String userQueryFromSpeech;
     private TextToSpeech tts;
     private SpeechRecognizer speechRecognizer;
@@ -112,6 +127,8 @@ public class MainActivity extends AppCompatActivity implements
     private boolean isListening = false;
     private LinearLayout chatBodyContainer;
     private ChatFutures chatModel;
+    private HandlerThread handlerThread;
+    private Handler handler;
     private boolean arMode = true; // Track whether we're in AR mode
     // Base pose detector with streaming frames, when depending on the pose-detection sdk
     PoseDetectorOptions options =
@@ -122,8 +139,18 @@ public class MainActivity extends AppCompatActivity implements
     Runnable RunMlkit = new Runnable() {
         @Override
         public void run() {
-            // Ensure the inputImage is properly created before processing
+            Bitmap bitmap = textureView.getBitmap();
+            if (bitmap != null) {
+                inputImage = InputImage.fromBitmap(bitmap, 0);
+
+                // Run ML Kit processing here
+                // Example: runTextRecognition(image);
+            } else {
+                Log.e("RunMlkit", "Bitmap is null");
+            }
+
             if (inputImage != null) {
+
                 poseDetector.process(inputImage)
                         .addOnSuccessListener(new OnSuccessListener<Pose>() {
                             @Override
@@ -169,7 +196,7 @@ public class MainActivity extends AppCompatActivity implements
                         .commit();
             }
         }
-        /*
+
         arCoreSwitch = findViewById(R.id.arcore_switch);
         arCoreSwitch.setOnCheckedChangeListener(
                 (view, checked) -> {
@@ -191,8 +218,14 @@ public class MainActivity extends AppCompatActivity implements
         drawerLayout = findViewById(R.id.drawer_layout);
         NavigationView navigationView = findViewById(R.id.nav_view);
 
+        // Initialize and start the handler thread
+        handlerThread = new HandlerThread("MLKitThread");
+        handlerThread.start();
+        handler = new Handler(handlerThread.getLooper());
+        handler.post(RunMlkit);
 
-         */
+        micButton = findViewById(R.id.micButton);
+
         FloatingActionButton fabToggleDrawer = findViewById(R.id.fab_toggle_drawer);
         fabToggleDrawer.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -204,6 +237,28 @@ public class MainActivity extends AppCompatActivity implements
                 }
             }
         });
+        micButton.setOnClickListener(v -> {
+            if (isListening) {
+//                arMode = true;
+//                try {
+//                    resumeARCore();
+//                } catch (Exception e) {
+//                    throw new RuntimeException(e);
+//                }
+                stopListening();
+            } else {
+//                arMode = false;
+//                // Pause ARCore.
+//                pauseARCore();
+//                resumeCamera2();
+
+                startListening();
+            }
+        });
+        // Request permissions if not granted
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO}, 1);
+        }
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
         speechRecognizer.setRecognitionListener(new RecognitionListener() {
             @Override
@@ -253,7 +308,7 @@ public class MainActivity extends AppCompatActivity implements
                     populateChatBody("You", query);
 
 
-                    GeminiPro.getResponse(chatModel, query, latestBitmap, new ResponseCallback() {
+                    GeminiPro.getResponse(chatModel, query, textureView.getBitmap(), new ResponseCallback() {
                         @Override
                         public void onResponse(String response) {
 
@@ -294,6 +349,23 @@ public class MainActivity extends AppCompatActivity implements
             arFragment.getArSceneView().pause(); // Pause ARCore session
         }
         // Additional ARCore cleanup if needed
+    }
+    private void startListening() {
+        Intent speechRecognizerIntent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        speechRecognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        speechRecognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault());
+
+        speechRecognizer.startListening(speechRecognizerIntent);
+        isListening = true;
+        micButton.setImageResource(R.drawable.mic_red); // Change mic icon to indicate listening
+    }
+
+
+    private void stopListening() {
+
+        speechRecognizer.stopListening();
+        isListening = false;
+        micButton.setImageResource(R.drawable.mic_green); // Change mic icon back
     }
 
     private void resumeCamera2() {
@@ -409,31 +481,70 @@ public class MainActivity extends AppCompatActivity implements
         AnchorNode anchorNode = new AnchorNode(anchor);
         anchorNode.setParent(arFragment.getArSceneView().getScene());
 
+//        // Create the transformable model and add it to the anchor.
+//        TransformableNode model = new TransformableNode(arFragment.getTransformationSystem());
+//        model.setParent(anchorNode);
+//        model.setRenderable(this.model)
+//                .animate(true).start();
+//        model.select();
+//
+//        Node titleNode = new Node();
+//        titleNode.setParent(model);
+//        titleNode.setEnabled(false);
+//        titleNode.setLocalPosition(new Vector3(0.0f, 1.0f, 0.0f));
+//        titleNode.setRenderable(viewRenderable);
+//        titleNode.setEnabled(true);
         // Create the transformable model and add it to the anchor.
-        TransformableNode model = new TransformableNode(arFragment.getTransformationSystem());
-        model.setParent(anchorNode);
-        model.setRenderable(this.model)
-                .animate(true).start();
-        model.select();
+        TransformableNode modelNode = new TransformableNode(arFragment.getTransformationSystem());
+        modelNode.setParent(anchorNode);
 
-        Node titleNode = new Node();
-        titleNode.setParent(model);
-        titleNode.setEnabled(false);
-        titleNode.setLocalPosition(new Vector3(0.0f, 1.0f, 0.0f));
-        titleNode.setRenderable(viewRenderable);
-        titleNode.setEnabled(true);
+        final int rawResId;
+        final Color chromaKeyColor;
+        if (mode == R.id.menuPlainVideo) {
+            rawResId = R.raw.timer_16;
+            chromaKeyColor = null;
+        } else {
+            rawResId = R.raw.timer_16_v2;
+            chromaKeyColor = new Color(0.1843f, 1.0f, 0.098f);
+        }
+        MediaPlayer player = MediaPlayer.create(this, rawResId);
+        player.setLooping(true);
+        player.start();
+        mediaPlayers.add(player);
+        VideoNode videoNode = new VideoNode(this, player, chromaKeyColor, new VideoNode.Listener() {
+            @Override
+            public void onCreated(VideoNode videoNode) {
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+                Toast.makeText(MainActivity.this, "Unable to load material", Toast.LENGTH_LONG).show();
+            }
+        });
+        videoNode.setParent(modelNode);
+
+        // If you want that the VideoNode is always looking to the
+        // Camera (You) comment the next line out. Use it mainly
+        // if you want to display a Video. The use with activated
+        // ChromaKey might look odd.
+        //videoNode.setRotateAlwaysToCamera(true);
+
+        modelNode.select();
     }
     private final TextureView.SurfaceTextureListener textureListener = new TextureView.SurfaceTextureListener() {
         @Override
         public void onSurfaceTextureAvailable(@NonNull SurfaceTexture surface, int width, int height) {
             startCamera();
-            configureTransform(width, height);
+            configureTransform(width, height,0.7f);
+
 
         }
 
         @Override
         public void onSurfaceTextureSizeChanged(@NonNull SurfaceTexture surface, int width, int height) {
             // Handle surface texture size change if needed
+            configureTransform(width, height,0.7f);
+
         }
 
         @Override
@@ -472,11 +583,12 @@ public class MainActivity extends AppCompatActivity implements
         try {
             SurfaceTexture texture = textureView.getSurfaceTexture();
             assert texture != null;
-            texture.setDefaultBufferSize(1920, 1080); // Set the preview size
+            texture.setDefaultBufferSize(textureView.getWidth(), textureView.getHeight()); // Set the preview size
             Surface previewSurface = new Surface(texture);
 
             CaptureRequest.Builder builder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             builder.addTarget(previewSurface);
+            setUpCameraOutputs();
 
             cameraDevice.createCaptureSession(
                     List.of(previewSurface),
@@ -538,29 +650,123 @@ public class MainActivity extends AppCompatActivity implements
 
         return modelFutures.startChat();
     }
-    private void configureTransform(int viewWidth, int viewHeight) {
-        if (textureView == null) return;
+    private void setUpCameraOutputs() {
+        CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
+        try {
+            String cameraId = manager.getCameraIdList()[0];
+            CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
+            int sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
+            int rotation = getWindowManager().getDefaultDisplay().getRotation();
+            boolean swappedDimensions = false;
 
-        Matrix matrix = new Matrix();
-        float viewRatio = (float) viewWidth / (float) viewHeight;
-        float previewRatio = (float) textureView.getWidth() / (float) textureView.getHeight();
+            switch (rotation) {
+                case Surface.ROTATION_0:
+                case Surface.ROTATION_180:
+                    if (sensorOrientation == 90 || sensorOrientation == 270) {
+                        swappedDimensions = true;
+                    }
+                    break;
+                case Surface.ROTATION_90:
+                case Surface.ROTATION_270:
+                    if (sensorOrientation == 0 || sensorOrientation == 180) {
+                        swappedDimensions = true;
+                    }
+                    break;
+                default:
+                    Log.e(TAG, "Display rotation is invalid: " + rotation);
+            }
 
-        if (viewRatio > previewRatio) {
-            float scale = (float) viewHeight / (float) textureView.getHeight();
-            matrix.setScale(scale, scale);
-            float dx = (viewWidth - textureView.getWidth() * scale) / 2;
-            matrix.postTranslate(dx, 0);
-        } else {
-            float scale = (float) viewWidth / (float) textureView.getWidth();
-            matrix.setScale(scale, scale);
-            float dy = (viewHeight - textureView.getHeight() * scale) / 2;
-            matrix.postTranslate(0, dy);
+            int width = textureView.getWidth();
+            int height = textureView.getHeight();
+            if (swappedDimensions) {
+                width = textureView.getHeight();
+                height = textureView.getWidth();
+            }
+
+            //configureTransform(width, height);
+
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
         }
+    }
+    private void configureTransform(int viewWidth, int viewHeight, float verticalScaleFactor) {
+        if (null == textureView) {
+            return;
+        }
+        Matrix matrix = new Matrix();
+        int rotation = getWindowManager().getDefaultDisplay().getRotation();
+        RectF viewRect = new RectF(0, 0, viewWidth, viewHeight);
+        RectF bufferRect = new RectF(0, 0, 1920, 1080);
+        float centerX = viewRect.centerX();
+        float centerY = viewRect.centerY();
 
-        // Rotate the TextureView if needed
-        matrix.postRotate(90, textureView.getWidth() / 2f, textureView.getHeight() / 2f);
+        if (rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270) {
+            bufferRect.offset(centerX - bufferRect.centerX(), centerY - bufferRect.centerY());
+            matrix.setRectToRect(viewRect, bufferRect, Matrix.ScaleToFit.FILL);
+
+            // Apply custom scaling
+            float horizontalScale = Math.max(
+                    (float) viewHeight / 1920,
+                    (float) viewWidth / 1080);
+            matrix.postScale(horizontalScale, verticalScaleFactor, centerX, centerY);
+
+            matrix.postRotate(90 * (rotation - 2), centerX, centerY);
+        } else if (rotation == Surface.ROTATION_180) {
+            matrix.postRotate(180, centerX, centerY);
+        }
         textureView.setTransform(matrix);
     }
+
+
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        super.onCreateOptionsMenu(menu);
+        getMenuInflater().inflate(R.menu.activity_main, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        item.setChecked(!item.isChecked());
+        this.mode = item.getItemId();
+        return true;
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+
+        for (MediaPlayer mediaPlayer : this.mediaPlayers) {
+            mediaPlayer.start();
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+
+        for (MediaPlayer mediaPlayer : this.mediaPlayers) {
+            mediaPlayer.pause();
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        // Quit the handler thread
+        handlerThread.quitSafely();
+        try {
+            handlerThread.join();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        for (MediaPlayer mediaPlayer : this.mediaPlayers) {
+            mediaPlayer.stop();
+            mediaPlayer.reset();
+        }
+    }
+
 
 
 }

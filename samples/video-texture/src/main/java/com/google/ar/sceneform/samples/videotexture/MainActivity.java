@@ -22,11 +22,11 @@ import com.google.ar.core.HitResult;
 import com.google.ar.core.Plane;
 import com.google.ar.sceneform.AnchorNode;
 import com.google.ar.sceneform.Sceneform;
-import com.google.ar.sceneform.rendering.Color;
 import com.google.ar.sceneform.ux.ArFragment;
 import com.google.ar.sceneform.ux.BaseArFragment;
 import com.google.ar.sceneform.ux.TransformableNode;
 import com.google.ar.sceneform.ux.VideoNode;
+import com.google.ar.sceneform.rendering.Color;
 
 import java.util.ArrayList;
 import java.util.List;
