@@ -27,7 +27,10 @@ dependencies {
     implementation "androidx.appcompat:appcompat:$appcompat_version"
     implementation "androidx.fragment:fragment:$fragment_version"
     implementation("com.google.mlkit:pose-detection:18.0.0-beta3")
+    implementation ("com.google.ai.client.generativeai:generativeai:0.7.0")
 
     releaseImplementation "com.gorisse.thomas.sceneform:sceneform:1.23.0"
+    implementation ("org.reactivestreams:reactive-streams:1.0.3")
+
     debugApi project(":sceneform")
 }

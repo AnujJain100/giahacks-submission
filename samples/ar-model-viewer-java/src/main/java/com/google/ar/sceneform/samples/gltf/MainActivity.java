@@ -1,6 +1,8 @@
 package com.google.ar.sceneform.samples.gltf;
 
 import static com.google.ar.sceneform.rendering.HeadlessEngineWrapper.TAG;
+
+import android.content.Context;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
@@ -33,11 +35,14 @@ import android.media.ImageReader;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.widget.ImageView;
+import android.widget.ScrollView;
+import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.Switch;
 
@@ -77,6 +82,11 @@ public class MainActivity extends AppCompatActivity implements
         ArFragment.OnViewCreatedListener,
         ImageReader.OnImageAvailableListener{
     private InputImage inputImage;
+    private String userQueryFromSpeech;
+
+    private SpeechRecognizer speechRecognizer;
+    private TextView ttsTextView;
+    private TextView geminiResponse;
     private Bitmap latestBitmap;
     private ImageView micButton;
     private CameraManager cameraManager;
@@ -128,6 +138,7 @@ public class MainActivity extends AppCompatActivity implements
         setContentView(R.layout.activity_main);
         getSupportFragmentManager().addFragmentOnAttachListener(this);
         textureView = findViewById(R.id.camera_preview);
+        ttsTextView = findViewById(R.id.ttsTextView);
 
         if (savedInstanceState == null) {
             if (Sceneform.isSupported(this)) {
@@ -154,6 +165,7 @@ public class MainActivity extends AppCompatActivity implements
                     }
                 });
         loadModels();
+
     }
 
     private void pauseARCore() {
@@ -378,4 +390,6 @@ public class MainActivity extends AppCompatActivity implements
 
 
     }
+
+
 }
