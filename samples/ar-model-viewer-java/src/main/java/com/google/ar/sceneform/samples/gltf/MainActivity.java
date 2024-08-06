@@ -9,6 +9,8 @@ import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.android.material.navigation.NavigationView;
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.pose.Pose;
 import com.google.mlkit.vision.pose.PoseDetection;
@@ -49,6 +51,8 @@ import android.widget.Switch;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
+import androidx.core.view.GravityCompat;
+import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentOnAttachListener;
@@ -98,6 +102,7 @@ public class MainActivity extends AppCompatActivity implements
     private ViewRenderable viewRenderable;
     private Switch arCoreSwitch;
     ArrayList<Pose> poseArrayList = new ArrayList<>();
+    private DrawerLayout drawerLayout;
 
     private boolean arMode = true; // Track whether we're in AR mode
     // Base pose detector with streaming frames, when depending on the pose-detection sdk
@@ -165,6 +170,20 @@ public class MainActivity extends AppCompatActivity implements
                     }
                 });
         loadModels();
+        drawerLayout = findViewById(R.id.drawer_layout);
+        NavigationView navigationView = findViewById(R.id.nav_view);
+
+        FloatingActionButton fabToggleDrawer = findViewById(R.id.fab_toggle_drawer);
+        fabToggleDrawer.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+                    drawerLayout.closeDrawer(GravityCompat.START);
+                } else {
+                    drawerLayout.openDrawer(GravityCompat.START);
+                }
+            }
+        });
 
     }
 

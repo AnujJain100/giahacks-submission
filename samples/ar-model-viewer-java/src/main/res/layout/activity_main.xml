@@ -1,55 +1,85 @@
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.drawerlayout.widget.DrawerLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:id="@+id/drawer_layout"
+    android:fitsSystemWindows="true"
+    tools:openDrawer="start"
     tools:context=".MainActivity">
 
-    <androidx.fragment.app.FragmentContainerView
-        android:id="@+id/arFragment"
+    <RelativeLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent">
 
-    <TextureView
-        android:id="@+id/camera_preview"
-        android:layout_width="match_parent"
+        <androidx.fragment.app.FragmentContainerView
+            android:id="@+id/arFragment"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <TextureView
+            android:id="@+id/camera_preview"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone" />
+
+        <ImageView
+            android:id="@+id/micButton"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_margin="15dp"
+            android:layout_alignParentBottom="true"
+            android:layout_alignParentEnd="true"
+            android:backgroundTint="#F9F8FA"
+            android:src="@drawable/mic_green" />
+
+        <Switch
+            android:id="@+id/arcore_switch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_alignParentTop="true"
+            android:layout_marginStart="12dp"
+            android:layout_marginTop="22dp"
+            android:minHeight="48dp"
+            android:switchPadding="8dp"
+            android:text="AR" />
+
+        <TextView
+            android:id="@+id/ttsTextView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
+            android:layout_centerHorizontal="true"
+            android:padding="16dp"
+            android:text="@string/response_text"
+            android:textColor="@android:color/black"
+            android:textSize="18sp" />
+
+        <TextView
+            android:id="@+id/gemini_response"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp" />
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/fab_toggle_drawer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|start"
+            android:layout_margin="12dp"
+            android:src="@drawable/ic_baseline_add_24"
+            app:tint="@android:color/white" />
+
+    </RelativeLayout>
+
+    <com.google.android.material.navigation.NavigationView
+        android:layout_width="wrap_content"
         android:layout_height="match_parent"
-        android:visibility="gone" />
+        android:id="@+id/nav_view"
+        android:layout_gravity="start"
+        app:itemIconTint="#FFFFFF"
+        app:itemTextColor="#000000"/>
 
-    <ImageView
-        android:id="@+id/micButton"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:layout_margin="15dp"
-        android:layout_alignParentBottom="true"
-        android:layout_alignParentEnd="true"
-        android:backgroundTint="#F9F8FA"
-        android:src="@drawable/mic_green" />
-
-    <Switch
-        android:id="@+id/arcore_switch"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_alignParentStart="true"
-        android:layout_alignParentTop="true"
-        android:layout_marginStart="12dp"
-        android:layout_marginTop="22dp"
-        android:minHeight="48dp"
-        android:switchPadding="8dp"
-        android:text="AR" />
-    <TextView
-        android:id="@+id/ttsTextView"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
-        android:layout_centerHorizontal="true"
-        android:padding="16dp"
-        android:text="@string/response_text"
-        android:textColor="@android:color/black"
-        android:textSize="18sp" />
-
-    <TextView
-        android:id="@+id/gemini_response"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="20dp" />
-</RelativeLayout>
+</androidx.drawerlayout.widget.DrawerLayout>
