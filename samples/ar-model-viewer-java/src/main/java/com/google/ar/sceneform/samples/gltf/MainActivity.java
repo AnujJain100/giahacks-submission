@@ -11,6 +11,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.RectF;
+import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.MediaPlayer;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -52,6 +53,8 @@ import android.media.ImageReader;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
+import android.util.Size;
+import android.util.SparseIntArray;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -108,6 +111,9 @@ public class MainActivity extends AppCompatActivity implements
     private final List<MediaPlayer> mediaPlayers = new ArrayList<>();
     private int mode = R.id.menuPlainVideo;
     private String userQueryFromSpeech;
+    private int sensorOrientation;
+
+    private Size mPreviewSize;
     private TextToSpeech tts;
     private SpeechRecognizer speechRecognizer;
     private TextView ttsTextView;
@@ -130,6 +136,13 @@ public class MainActivity extends AppCompatActivity implements
     private HandlerThread handlerThread;
     private Handler handler;
     private boolean arMode = true; // Track whether we're in AR mode
+    private static final SparseIntArray ORIENTATIONS = new SparseIntArray();
+    static {
+        ORIENTATIONS.append(Surface.ROTATION_0, 90);
+        ORIENTATIONS.append(Surface.ROTATION_90, 0);
+        ORIENTATIONS.append(Surface.ROTATION_180, 270);
+        ORIENTATIONS.append(Surface.ROTATION_270, 180);
+    }
     // Base pose detector with streaming frames, when depending on the pose-detection sdk
     PoseDetectorOptions options =
             new PoseDetectorOptions.Builder()
@@ -255,6 +268,7 @@ public class MainActivity extends AppCompatActivity implements
                 startListening();
             }
         });
+
         // Request permissions if not granted
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO}, 1);
@@ -394,6 +408,11 @@ public class MainActivity extends AppCompatActivity implements
                 // for ActivityCompat#requestPermissions for more details.
                 return;
             }
+            CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
+            StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+            mPreviewSize = map.getOutputSizes(SurfaceTexture.class)[0];
+
+            configureTransform(textureView.getWidth(), textureView.getHeight());
             manager.openCamera(cameraId, stateCallback, null);
         } catch (CameraAccessException e) {
             e.printStackTrace();
@@ -475,7 +494,11 @@ public class MainActivity extends AppCompatActivity implements
             Toast.makeText(this, "Loading...", Toast.LENGTH_SHORT).show();
             return;
         }
+        int width = arFragment.getArSceneView().getWidth();
+        int height = arFragment.getArSceneView().getHeight();
 
+        // Now you can use the width and height
+        Log.d("ARFragment Dimensions", "Width: " + width + ", Height: " + height);
         // Create the Anchor.
         Anchor anchor = hitResult.createAnchor();
         AnchorNode anchorNode = new AnchorNode(anchor);
@@ -535,7 +558,7 @@ public class MainActivity extends AppCompatActivity implements
         @Override
         public void onSurfaceTextureAvailable(@NonNull SurfaceTexture surface, int width, int height) {
             startCamera();
-            configureTransform(width, height,0.7f);
+            configureTransform(width, height);
 
 
         }
@@ -543,7 +566,7 @@ public class MainActivity extends AppCompatActivity implements
         @Override
         public void onSurfaceTextureSizeChanged(@NonNull SurfaceTexture surface, int width, int height) {
             // Handle surface texture size change if needed
-            configureTransform(width, height,0.7f);
+           // configureTransform(width, height);
 
         }
 
@@ -583,12 +606,13 @@ public class MainActivity extends AppCompatActivity implements
         try {
             SurfaceTexture texture = textureView.getSurfaceTexture();
             assert texture != null;
-            texture.setDefaultBufferSize(textureView.getWidth(), textureView.getHeight()); // Set the preview size
+            texture.setDefaultBufferSize(2282, 1080); // Set the preview size
             Surface previewSurface = new Surface(texture);
 
             CaptureRequest.Builder builder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             builder.addTarget(previewSurface);
             setUpCameraOutputs();
+            //configureTransform(textureView.getWidth(), textureView.getHeight());
 
             cameraDevice.createCaptureSession(
                     List.of(previewSurface),
@@ -689,34 +713,32 @@ public class MainActivity extends AppCompatActivity implements
             e.printStackTrace();
         }
     }
-    private void configureTransform(int viewWidth, int viewHeight, float verticalScaleFactor) {
-        if (null == textureView) {
+    // Method to configure the transform for TextureView
+    private void configureTransform(int viewWidth, int viewHeight) {
+        Activity activity = MainActivity.this;
+        if (null == textureView || null == mPreviewSize || null == activity) {
             return;
         }
+        int rotation = activity.getWindowManager().getDefaultDisplay().getRotation();
         Matrix matrix = new Matrix();
-        int rotation = getWindowManager().getDefaultDisplay().getRotation();
         RectF viewRect = new RectF(0, 0, viewWidth, viewHeight);
-        RectF bufferRect = new RectF(0, 0, 1920, 1080);
+        RectF bufferRect = new RectF(0, 0, mPreviewSize.getHeight(), mPreviewSize.getWidth());
         float centerX = viewRect.centerX();
         float centerY = viewRect.centerY();
 
-        if (rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270) {
+        if (Surface.ROTATION_90 == rotation || Surface.ROTATION_270 == rotation) {
             bufferRect.offset(centerX - bufferRect.centerX(), centerY - bufferRect.centerY());
             matrix.setRectToRect(viewRect, bufferRect, Matrix.ScaleToFit.FILL);
-
-            // Apply custom scaling
-            float horizontalScale = Math.max(
-                    (float) viewHeight / 1920,
-                    (float) viewWidth / 1080);
-            matrix.postScale(horizontalScale, verticalScaleFactor, centerX, centerY);
-
+            float scale = Math.max(
+                    (float) viewHeight / mPreviewSize.getHeight(),
+                    (float) viewWidth / mPreviewSize.getWidth());
+            matrix.postScale(scale, scale, centerX, centerY);
             matrix.postRotate(90 * (rotation - 2), centerX, centerY);
-        } else if (rotation == Surface.ROTATION_180) {
+        } else if (Surface.ROTATION_180 == rotation) {
             matrix.postRotate(180, centerX, centerY);
         }
         textureView.setTransform(matrix);
     }
-
 
 
     @Override
@@ -765,7 +787,9 @@ public class MainActivity extends AppCompatActivity implements
             mediaPlayer.stop();
             mediaPlayer.reset();
         }
+
     }
+
 
 
 
