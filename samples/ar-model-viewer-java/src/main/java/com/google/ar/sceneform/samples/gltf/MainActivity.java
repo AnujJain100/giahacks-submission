@@ -2,8 +2,17 @@ package com.google.ar.sceneform.samples.gltf;
 
 import static android.app.PendingIntent.getActivity;
 import static com.google.ar.sceneform.rendering.HeadlessEngineWrapper.TAG;
+
+import com.google.ar.core.Camera;
+import com.google.ar.core.Coordinates2d;
+import com.google.ar.core.Frame;
+import com.google.ar.core.exceptions.NotYetAvailableException;
+import com.google.ar.sceneform.FrameTime;
 import com.google.ar.sceneform.ux.VideoNode;
 import com.google.ar.sceneform.rendering.Color;
+
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -53,6 +62,7 @@ import android.media.ImageReader;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
+import android.util.Pair;
 import android.util.Size;
 import android.util.SparseIntArray;
 import android.view.LayoutInflater;
@@ -111,8 +121,7 @@ public class MainActivity extends AppCompatActivity implements
     private final List<MediaPlayer> mediaPlayers = new ArrayList<>();
     private int mode = R.id.menuPlainVideo;
     private String userQueryFromSpeech;
-    private int sensorOrientation;
-
+    private Image rawDepth;
     private Size mPreviewSize;
     private TextToSpeech tts;
     private SpeechRecognizer speechRecognizer;
@@ -447,13 +456,149 @@ public class MainActivity extends AppCompatActivity implements
         }
     }
 
+    // Method to unproject normalized device coordinates to 3D world coordinates
+    float[] unproject(Frame frame, float u, float v, float depth) {
+        float[] result = new float[4];
+
+        // Define the normalized device coordinates
+        float[] ndc = {u * 2 - 1, v * 2 - 1, 1, 1};
+
+        // Retrieve the projection and view matrices
+        float[] projMatrix = new float[16];
+        frame.getCamera().getProjectionMatrix(projMatrix, 0, 0.1f, 100.0f);
+
+        float[] viewMatrix = new float[16];
+        frame.getCamera().getViewMatrix(viewMatrix, 0);
+
+        // Inverse of the projection * view matrix
+        float[] invProjViewMatrix = new float[16];
+        android.opengl.Matrix.multiplyMM(invProjViewMatrix, 0, projMatrix, 0, viewMatrix, 0);
+        android.opengl.Matrix.invertM(invProjViewMatrix, 0, invProjViewMatrix, 0);
+
+        // Apply the inverse to the NDC coordinates
+        android.opengl.Matrix.multiplyMV(result, 0, invProjViewMatrix, 0, ndc, 0);
+
+        // Scale the resulting vector by the depth value
+        for (int i = 0; i < 3; i++) {
+            result[i] *= depth;
+        }
+
+        // Return the 3D coordinates
+        return new float[]{result[0], result[1], result[2]};
+    }
     @Override
     public void onViewCreated(ArSceneView arSceneView) {
         arFragment.setOnViewCreatedListener(null);
 
         // Fine adjust the maximum frame rate
         arSceneView.setFrameRateFactor(SceneView.FrameRate.FULL);
+        // Add the update listener
+        arSceneView.getScene().addOnUpdateListener(this::onFrameUpdate);
     }
+    // This method will be called every frame
+    private void onFrameUpdate(FrameTime frameTime) {
+        Session session = arFragment.getArSceneView().getSession();
+
+        Frame frame = arFragment.getArSceneView().getArFrame();
+        Camera camera = frame.getCamera();
+
+
+        if (!poseArrayList.isEmpty()) {
+            Log.d("pose array", "is not empty");
+
+            com.google.mlkit.vision.pose.Pose pose = poseArrayList.get(0);
+            PoseLandmark leftShoulder = pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER);
+            PoseLandmark rightShoulder = pose.getPoseLandmark(PoseLandmark.RIGHT_SHOULDER);
+            PoseLandmark leftHip = pose.getPoseLandmark(PoseLandmark.LEFT_HIP);
+            PoseLandmark rightHip = pose.getPoseLandmark(PoseLandmark.RIGHT_HIP);
+
+            if (leftShoulder != null && rightShoulder != null && leftHip != null && rightHip != null) {
+                float chestX = (leftShoulder.getPosition().x + rightShoulder.getPosition().x + leftHip.getPosition().x + rightHip.getPosition().x) / 4;
+                float chestY = (leftShoulder.getPosition().y + rightShoulder.getPosition().y + leftHip.getPosition().y + rightHip.getPosition().y) / 4 * 0.75f + (leftShoulder.getPosition().y + rightShoulder.getPosition().y) / 4 * 0.25f;
+                float u = (float) chestX / (float) frame.getCamera().getImageIntrinsics().getImageDimensions()[0];
+                float v = (float) chestY / (float) frame.getCamera().getImageIntrinsics().getImageDimensions()[1];
+                // Convert NDC to 3D world coordinates using the depth value
+
+                try {
+
+                    // Convert CPU coordinates into depth map coordinates
+                    Pair<Integer, Integer> depthCoordinates = transformToDepthCoordinates(frame, chestX, chestY);
+                    if (depthCoordinates != null) {
+                        int depthX = depthCoordinates.first;
+                        int depthY = depthCoordinates.second;
+
+                        rawDepth = frame.acquireRawDepthImage16Bits();
+                        if (depthX >= 0 && depthY >= 0 && depthX < rawDepth.getWidth() && depthY < rawDepth.getHeight()) {
+                            int z = getMillimetersDepth(rawDepth, depthX, depthY);
+                            float depthZ = z / 1000.0f;
+                            // Convert NDC to 3D world coordinates using the depth value
+                            float[] xyz = unproject(frame, u, v, depthZ);
+
+                            // Create ARCore pose from camera space coordinates
+                            com.google.ar.core.Pose landmarkPose = com.google.ar.core.Pose.makeTranslation(xyz[0], xyz[1], xyz[2]);
+
+                            // Create an anchor at the landmark's position
+                            Anchor anchor = session.createAnchor(landmarkPose);
+
+                            // Your code here. For example:
+                            AnchorNode anchorNode = new AnchorNode(anchor);
+                            anchorNode.setParent(arFragment.getArSceneView().getScene());
+                            TransformableNode modelNode = new TransformableNode(arFragment.getTransformationSystem());
+                            modelNode.setParent(anchorNode);
+
+                            final int rawResId;
+                            final Color chromaKeyColor;
+                            if (mode == R.id.menuPlainVideo) {
+                                rawResId = R.raw.timer_16;
+                                chromaKeyColor = null;
+                            } else {
+                                rawResId = R.raw.timer_16_v2;
+                                chromaKeyColor = new Color(0.1843f, 1.0f, 0.098f);
+                            }
+                            MediaPlayer player = MediaPlayer.create(this, rawResId);
+                            player.setLooping(true);
+                            player.start();
+                            mediaPlayers.add(player);
+                            VideoNode videoNode = new VideoNode(this, player, chromaKeyColor, new VideoNode.Listener() {
+                                @Override
+                                public void onCreated(VideoNode videoNode) {
+                                }
+
+                                @Override
+                                public void onError(Throwable throwable) {
+                                    Toast.makeText(MainActivity.this, "Unable to load material", Toast.LENGTH_LONG).show();
+                                }
+                            });
+                            videoNode.setParent(modelNode);
+
+                            // If you want that the VideoNode is always looking to the
+                            // Camera (You) comment the next line out. Use it mainly
+                            // if you want to display a Video. The use with activated
+                            // ChromaKey might look odd.
+                            //videoNode.setRotateAlwaysToCamera(true);
+
+                            modelNode.select();
+
+                            Log.d("ARCore", "Anchor added at coordinates:");
+                        } else {
+                            Log.e("DepthCoordinates", "Invalid depth coordinates: (" + depthX + ", " + depthY + ")");
+                        }
+                    } else {
+                        Log.e("DepthCoordinates", "Transform to depth coordinates failed.");
+                    }
+                } catch (NotYetAvailableException e) {
+                    Log.e("DepthImage", "Depth image not available", e);
+                }
+            } else {
+                Log.e("pose landmarks", "One or more landmarks are null");
+            }
+        } else {
+            Log.d("pose array", "is empty");
+        }
+        // Update your UI elements, run pose detection, etc.
+        Log.d("FrameUpdate", "A new frame has been rendered");
+    }
+
 
     public void loadModels() {
         WeakReference<MainActivity> weakActivity = new WeakReference<>(this);
@@ -790,6 +935,44 @@ public class MainActivity extends AppCompatActivity implements
 
     }
 
+    /** Obtain the depth in millimeters for depthImage at coordinates (x, y). */
+    public int getMillimetersDepth(Image depthImage, int x, int y) {
+        // The depth image has a single plane, which stores depth for each
+        // pixel as 16-bit unsigned integers.
+        Image.Plane plane = depthImage.getPlanes()[0];
+        int byteIndex = x * plane.getPixelStride() + y * plane.getRowStride();
+        ByteBuffer buffer = plane.getBuffer().order(ByteOrder.nativeOrder());
+        return Short.toUnsignedInt(buffer.getShort(byteIndex));
+    }
+    private Pair<Integer, Integer> transformToDepthCoordinates(Frame frame, float chestX, float chestY) throws NotYetAvailableException {
+        // Acquire the raw depth image from the frame
+        Image rawDepth = frame.acquireRawDepthImage16Bits();
+
+        // Create an array for the CPU coordinates
+        float[] cpuCoordinates = new float[] {chestX, chestY};
+
+        // Create an array for the texture coordinates
+        float[] textureCoordinates = new float[2];
+
+        // Transform the CPU coordinates to texture coordinates
+        frame.transformCoordinates2d(
+                Coordinates2d.IMAGE_PIXELS,
+                cpuCoordinates,
+                Coordinates2d.TEXTURE_NORMALIZED,
+                textureCoordinates
+        );
+
+        // Check if the texture coordinates are valid
+        if (textureCoordinates[0] < 0 || textureCoordinates[1] < 0) {
+            // There are no valid depth coordinates, because the coordinates in the CPU image are in the
+            // cropped area of the depth image.
+            return null;
+        }
+
+        return new Pair<>(
+                (int) (textureCoordinates[0] * rawDepth.getWidth()),
+                (int) (textureCoordinates[1] * rawDepth.getHeight()));
+    }
 
 
 
