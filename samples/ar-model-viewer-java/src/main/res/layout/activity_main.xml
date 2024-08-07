@@ -65,7 +65,8 @@
             android:layout_gravity="bottom|start"
             android:layout_margin="12dp"
             android:src="@drawable/ic_baseline_add_24"
-            app:tint="@color/lavender"/>
+            app:tint="@color/lavender"
+            android:backgroundTint="@android:color/darker_gray"/>
     </FrameLayout>
 
     <com.google.android.material.navigation.NavigationView
@@ -73,6 +74,7 @@
         android:layout_height="match_parent"
         android:id="@+id/nav_view"
         android:layout_gravity="start"
+        android:background="@drawable/rounded_nav_view"
         app:itemIconTint="@color/lavender"
         app:itemTextColor="@color/lavender">
 
