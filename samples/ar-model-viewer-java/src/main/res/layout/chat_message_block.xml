@@ -12,19 +12,13 @@
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
-        <ImageView
-            android:id="@+id/imageView"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:layout_marginEnd="15dp"
-            app:srcCompat="@drawable/circle_bg" />
-
         <TextView
             android:id="@+id/userAgentNameTextView"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="TextView" />
+            android:text="TextView"
+            android:textStyle="bold" />
     </LinearLayout>
 
     <TextView
