@@ -15,6 +15,7 @@ import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.Executor;
 
@@ -24,6 +25,14 @@ public class GeminiPro {
         Content.Builder userContentBuilder = new Content.Builder();
 
         userContentBuilder.setRole("user");
+
+        userContentBuilder.addText("You are a medical professional with knowledge on different symptoms and their corresponding injuries." +
+                "Answer all my next prompts very concisely." +
+                "\"The person in front of me suffered some sort of medical\" +\n" +
+                "                \" emergency. Ask me questions about the symptoms that the injured person has sustained. " +
+                "Once you think you have enough information, try to diagnose the condition. You have access to the information given to you. Assume 911 has already been called, your job is to help the user" +
+                "treat the emergency by themselves until first responders arrive to the scene. " +
+                "Once you make a diagnosis, give the user one actionable step at a time. ");
         userContentBuilder.addImage(image);
         userContentBuilder.addText(query);
         Content userContent = userContentBuilder.build();
@@ -50,7 +59,9 @@ public class GeminiPro {
         String apiKey = BuildConfig2.apiKey;
 
         SafetySetting harrassmentSafety = new SafetySetting(HarmCategory.HARASSMENT,
-                BlockThreshold.ONLY_HIGH);
+                BlockThreshold.NONE);
+        SafetySetting medical = new SafetySetting(HarmCategory.DANGEROUS_CONTENT,
+                BlockThreshold.NONE);
 
         // Create the generation config
         GenerationConfig. Builder configBuilder = new GenerationConfig. Builder();
@@ -62,11 +73,12 @@ public class GeminiPro {
 
         // Instantiate the GenerativeModel
         GenerativeModel model = new GenerativeModel(
-                "gemini-1.5-flash",
+                "gemini-1.5-pro",
 
                 apiKey,
                 generationConfig,
-                Collections.singletonList(harrassmentSafety)
+                Arrays.asList(harrassmentSafety, medical)
+
         );
         return GenerativeModelFutures.from(model);
     }
