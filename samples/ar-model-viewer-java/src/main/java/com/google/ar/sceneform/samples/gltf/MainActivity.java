@@ -255,6 +255,13 @@ public class MainActivity extends AppCompatActivity implements
             }
         });
 
+        if (isTaskRoot()) {
+            Intent intent = new Intent(this, LandingActivity.class);
+            startActivity(intent);
+            finish();
+            return;
+        }
+
         if (savedInstanceState == null) {
             if (Sceneform.isSupported(this)) {
                 getSupportFragmentManager().beginTransaction()
