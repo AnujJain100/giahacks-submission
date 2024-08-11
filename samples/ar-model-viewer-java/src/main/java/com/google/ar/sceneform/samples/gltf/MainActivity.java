@@ -51,6 +51,7 @@ import android.graphics.YuvImage;
 import android.media.MediaPlayer;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Looper;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
@@ -142,6 +143,8 @@ public class MainActivity extends AppCompatActivity implements
     private InputImage inputImage;
     private static final long WAIT_TIME_MS = 5000; // 5 seconds
     private Handler handler = new Handler();
+    private boolean isCPRScheduledForRemoval = false;
+
     private boolean hasAnchored = false;
     private long startTime = -1;
     private ImageAnalysis imageAnalysis;
@@ -180,7 +183,7 @@ public class MainActivity extends AppCompatActivity implements
     private Renderable model;
     //person checking breathing
     private Renderable model2;
-
+    TransformableNode cpr;
     //spot location arrow
     private Renderable model3;
 
@@ -202,51 +205,33 @@ public class MainActivity extends AppCompatActivity implements
         ORIENTATIONS.append(Surface.ROTATION_180, 270);
         ORIENTATIONS.append(Surface.ROTATION_270, 180);
     }
-
-    private void heartAttackFunction(){
-
-        Log.d("HEART ATTACK FUNCTION", "HEART ATTACK CALLED");
-
-        // Get the AR session and frame
-        Session session = arFragment.getArSceneView().getSession();
-        Frame frame = arFragment.getArSceneView().getArFrame();
-
-
+    private void mainVideoNode(Frame frame, Session session) {
+        // Create the transformable model and add it to the anchor.
         Anchor newMarkAnchor = session.createAnchor(
-                frame.getCamera().getPose()
-                        .compose(com.google.ar.core.Pose.makeTranslation(0, 0, -1f))
-                        .extractTranslation());
-
-        // Check if the frame is valid
-        if (frame == null) {
-            Log.e("FrameUpdate", "Frame is null.");
-            return;
-        }
-
-        // Ensure ARCore is tracking
-        if (frame.getCamera().getTrackingState() != TrackingState.TRACKING) {
-            Log.e("ARCore", "ARCore is not tracking.");
-            return;
-        }
+        frame.getCamera().getPose()
+                .compose(com.google.ar.core.Pose.makeTranslation(0, 0, -1f))
+                .extractTranslation());
+        TransformableNode modelNode = new TransformableNode(arFragment.getTransformationSystem());
         AnchorNode anchorNode = new AnchorNode(newMarkAnchor);
         anchorNode.setParent(arFragment.getArSceneView().getScene());
 
-        TransformableNode modelNode = new TransformableNode(arFragment.getTransformationSystem());
         modelNode.setParent(anchorNode);
 
         final int rawResId;
         final Color chromaKeyColor;
         if (mode == R.id.menuPlainVideo) {
-            rawResId = R.raw.mainvideonode;
+            rawResId = R.raw.mainvidnode;
             chromaKeyColor = null;
         } else {
-            rawResId = R.raw.mainvideonode;
+            rawResId = R.raw.mainvidnode;
             chromaKeyColor = new Color(0.1843f, 1.0f, 0.098f);
         }
+
         MediaPlayer player = MediaPlayer.create(this, rawResId);
-        player.setLooping(true);
-        player.start();
+        player.setLooping(false);  // Set looping to false, so it only plays once.
+        player.start();  // Start playing the video
         mediaPlayers.add(player);
+
         VideoNode videoNode = new VideoNode(this, player, chromaKeyColor, new VideoNode.Listener() {
             @Override
             public void onCreated(VideoNode videoNode) {
@@ -259,104 +244,112 @@ public class MainActivity extends AppCompatActivity implements
         });
         videoNode.setParent(modelNode);
 
-        // If you want that the VideoNode is always looking to the
-        // Camera (You) comment the next line out. Use it mainly
-        // if you want to display a Video. The use with activated
-        // ChromaKey might look odd.
-        //videoNode.setRotateAlwaysToCamera(true);
+        // Optionally keep the video node always facing the camera
+        // videoNode.setRotateAlwaysToCamera(true);
 
-//
-//        // Check if pose array is not empty
-//        if (!poseArrayListNew.isEmpty()) {
-//            Log.d("pose array", "is not empty");
-//
-//            Pose pose = poseArrayListNew.get(0);
-//
-//            PoseLandmark leftShoulder = pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER);
-//            PoseLandmark rightShoulder = pose.getPoseLandmark(PoseLandmark.RIGHT_SHOULDER);
-//            PoseLandmark leftHip = pose.getPoseLandmark(PoseLandmark.LEFT_HIP);
-//            PoseLandmark rightHip = pose.getPoseLandmark(PoseLandmark.RIGHT_HIP);
-//
-//            if (leftShoulder != null && rightShoulder != null && leftHip != null && rightHip != null) {
-//                float chestX = (leftShoulder.getPosition().x + rightShoulder.getPosition().x + leftHip.getPosition().x + rightHip.getPosition().x) / 4;
-//                float chestY = (leftShoulder.getPosition().y + rightShoulder.getPosition().y + leftHip.getPosition().y + rightHip.getPosition().y) / 4 * 0.75f + (leftShoulder.getPosition().y + rightShoulder.getPosition().y) / 4 * 0.25f;
-//                float u = (float) chestX / (float) frame.getCamera().getImageIntrinsics().getImageDimensions()[0];
-//                float v = (float) chestY / (float) frame.getCamera().getImageIntrinsics().getImageDimensions()[1];
-//
-//                try {
-//                    // Acquire raw depth image
-//                    Image rawDepth = null;
-//                    try {
-//                        rawDepth = frame.acquireRawDepthImage16Bits();
-//                    } catch (NotYetAvailableException e) {
-//                        Log.e("DepthImage", "Depth image not available", e);
-//                        return;
-//                    }
-//                    Log.d("chestX", String.valueOf(chestX));
-//                    Log.d("chestY", String.valueOf(chestY));
-//
-//                    Log.d("U", String.valueOf(u));
-//                    Log.d("V", String.valueOf(v));
-//
-//                    float[] cpuCoordinates = new float[] {chestX, chestY};
-//                    float[] textureCoordinates = new float[2];
-//                    frame.transformCoordinates2d(
-//                            Coordinates2d.VIEW,
-//                            cpuCoordinates,
-//                            Coordinates2d.TEXTURE_NORMALIZED,
-//                            textureCoordinates);
-//
-//                    int depthX = (int) (textureCoordinates[0] * rawDepth.getWidth());
-//                    int depthY = (int) (textureCoordinates[1] * rawDepth.getHeight());
-//
-//                    if (rawDepth == null) {
-//                        Log.e("DepthImage", "Raw depth image is null");
-//                        return;
-//                    }
-//                    Log.d("DepthImage", "Depth image width: " + rawDepth.getWidth());
-//                    Log.d("DepthImage", "Depth image height: " + rawDepth.getHeight());
-//                    Log.d("DepthImage", "Depth coordinates: (" + depthX + ", " + depthY + ")");
-//                    int z = getMillimetersDepth(rawDepth, depthX, depthY);
-//                    float depthZ = z / 1000.0f;
-//                    Log.d("depthZ", String.valueOf(depthZ));
-//
-//                    Ray ray = arFragment.getArSceneView().getScene().getCamera().screenPointToRay(chestX, chestY);
-//                    float[] intersection = computeRayPlaneIntersection(ray, depthZ);
-//
-//                    if (intersection != null) {
-//                        if (currentAnchor == null) {
-//                            // Create ARCore pose from camera space coordinates
-//                            com.google.ar.core.Pose landmarkPose = com.google.ar.core.Pose.makeTranslation(intersection[0], intersection[1], intersection[2]);
-//
-//                            // Create an anchor at the landmark's position
-//                            currentAnchor = session.createAnchor(landmarkPose);
-//
-//                            // Create and set up anchor node and model node
-//                            AnchorNode anchorNode = new AnchorNode(currentAnchor);
-//                            anchorNode.setParent(arFragment.getArSceneView().getScene());
-//                            // Create the transformable model and add it to the anchor.
-//                            TransformableNode model = new TransformableNode(arFragment.getTransformationSystem());
-//                            model.setParent(anchorNode);
-//                            model.setRenderable(this.model3)
-//                                    .animate(true).start();
-//                            model.select();
-//                            Log.d("ARCore", "Anchor added at coordinates:");
-//                        } else {
-//                            Log.d("ARCore", "Anchor already exists, not updating pose.");
-//                        }
-//                    } else {
-//                        Log.e("DepthImage", "Depth image acquisition failed.");
-//                    }
-//
-//                } catch (Exception e) {
-//                    Log.e("AnchorCreation", "Exception during anchor creation", e);
-//                }
-//            } else {
-//                Log.e("pose landmarks", "One or more landmarks are null");
-//            }
-//        } else {
-//            Log.d("pose array", "is empty");
-//        }
+        modelNode.select();
+
+        // Schedule the destruction of the video node after 64 seconds
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            modelNode.setParent(null);  // Remove the video node from the scene
+            Log.d("VideoNode", "Video node destroyed after 64 seconds.");
+        }, 64000);  // 64 seconds in milliseconds
+    }
+
+    private void placeSpot(Frame frame, Session session) {
+        if (!poseArrayListNew.isEmpty()) {
+            Log.d("pose array", "is not empty");
+
+            Pose pose = poseArrayListNew.get(0);
+            PoseLandmark leftHip = pose.getPoseLandmark(PoseLandmark.LEFT_HIP);
+
+            if (leftHip != null) {
+                float leftHipX = leftHip.getPosition().x;
+                float leftHipY = leftHip.getPosition().y;
+
+                float u = (float) leftHipX / (float) frame.getCamera().getImageIntrinsics().getImageDimensions()[0];
+                float v = (float) leftHipY / (float) frame.getCamera().getImageIntrinsics().getImageDimensions()[1];
+
+                try {
+                    Image rawDepth = null;
+                    if (frame.acquireRawDepthImage16Bits() != null) {
+                        rawDepth = frame.acquireRawDepthImage16Bits();
+                        // Proceed with processing the rawDepth image
+                    } else {
+                        Log.e("DepthImage", "Depth image not available yet.");
+                    }
+                    float[] cpuCoordinates = new float[] {leftHipX, leftHipY};
+                    float[] textureCoordinates = new float[2];
+                    frame.transformCoordinates2d(
+                            Coordinates2d.VIEW,
+                            cpuCoordinates,
+                            Coordinates2d.TEXTURE_NORMALIZED,
+                            textureCoordinates);
+
+                    int depthX = (int) (textureCoordinates[0] * rawDepth.getWidth());
+                    int depthY = (int) (textureCoordinates[1] * rawDepth.getHeight());
+                    int z = getMillimetersDepth(rawDepth, depthX, depthY);
+                    float depthZ = z / 1000.0f;
+
+                    Ray ray = arFragment.getArSceneView().getScene().getCamera().screenPointToRay(leftHipX, leftHipY);
+                    float[] intersection = computeRayPlaneIntersection(ray, depthZ);
+
+                    if (intersection != null) {
+                        com.google.ar.core.Pose landmarkPose = com.google.ar.core.Pose.makeTranslation(intersection[0], intersection[1], intersection[2]);
+                        Anchor anchor = session.createAnchor(landmarkPose);
+                        AnchorNode anchorNode = new AnchorNode(anchor);
+                        anchorNode.setParent(arFragment.getArSceneView().getScene());
+
+                        TransformableNode model = new TransformableNode(arFragment.getTransformationSystem());
+                        model.setParent(anchorNode);
+                        model.setRenderable(this.model3)
+                                .animate(true).start();
+                        model.select();
+
+                        // Schedule the removal of the spot after 3 seconds
+                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                            anchorNode.setParent(null);  // This removes the anchor node and associated model
+                            Log.d("ARCore", "Spot removed after 3 seconds.");
+
+                            // Call the mainVideoNode function after the spot is destroyed
+                            mainVideoNode(frame, session);
+                        }, 5000);
+                    } else {
+                        Log.e("DepthImage", "Depth image acquisition failed.");
+                    }
+
+                } catch (Exception e) {
+                    Log.e("AnchorCreation", "Exception during anchor creation", e);
+                }
+            } else {
+                Log.e("pose landmarks", "One or more landmarks are null");
+            }
+        } else {
+            Log.d("pose array", "is empty");
+        }
+    }
+    private void heartAttackFunction(){
+        Log.e("HEART ATTACK FUNCTION", "HEART ATTACK CALLED");
+
+        // Get the AR session and frame
+        Session session = arFragment.getArSceneView().getSession();
+        Frame frame = arFragment.getArSceneView().getArFrame();
+
+        // Check if the frame is valid
+        if (frame == null) {
+            Log.e("FrameUpdate", "Frame is null.");
+            return;
+        }
+
+        // Ensure ARCore is tracking
+        if (frame.getCamera().getTrackingState() != TrackingState.TRACKING) {
+            Log.e("ARCore", "ARCore is not tracking.");
+            return;
+        }
+        placeSpot(frame,session);
+
+
+
     }
 
     // Base pose detector with streaming frames, when depending on the pose-detection sdk
@@ -423,6 +416,7 @@ public class MainActivity extends AppCompatActivity implements
         }
 
 
+
         arCoreSwitch = findViewById(R.id.arcore_switch);
         arCoreSwitch.setChecked(false);
         arCoreSwitch.setOnCheckedChangeListener(
@@ -455,9 +449,11 @@ public class MainActivity extends AppCompatActivity implements
             @Override
             public void onClick(View v) {
                 if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+
                     drawerLayout.closeDrawer(GravityCompat.START);
                 } else {
                     drawerLayout.openDrawer(GravityCompat.START);
+
                 }
             }
         });
@@ -537,7 +533,7 @@ public class MainActivity extends AppCompatActivity implements
                     GeminiPro.getResponse(chatModel, query, latestBitmap, new ResponseCallback() {
                         @Override
                         public void onResponse(String response) {
-                            if (response.contains("heart attack")){
+                            if (response.contains("Apple")){
                                 try {
                                     resumeARCore();
                                 } catch (Exception e) {
@@ -784,9 +780,21 @@ public class MainActivity extends AppCompatActivity implements
     }
     // This method will be called every frame
     private void onFrameUpdate(FrameTime frameTime) {
-
-
         Log.d("FrameUpdate", "A new frame has been rendered");
+
+        // Check if CPR node exists and is not already scheduled for removal
+        if (cpr != null && !isCPRScheduledForRemoval) {
+            isCPRScheduledForRemoval = true;
+
+            // Schedule the removal of the CPR node after 2 seconds
+            handler.postDelayed(() -> {
+                if (cpr != null) {
+                    cpr.setParent(null); // Remove the CPR node from the scene
+                    cpr = null; // Clear the reference
+                    Log.d("CPR Removal", "CPR node has been removed from the scene.");
+                }
+            }, 5000); // 2000 milliseconds = 2 seconds
+        }
     }
 
 
@@ -892,15 +900,16 @@ public class MainActivity extends AppCompatActivity implements
         anchorNode.setParent(arFragment.getArSceneView().getScene());
 
         // Create the transformable model and add it to the anchor.
-        TransformableNode model = new TransformableNode(arFragment.getTransformationSystem());
-        model.setParent(anchorNode);
+        cpr = new TransformableNode(arFragment.getTransformationSystem());
+        cpr.setParent(anchorNode);
 
-        model.setRenderable(this.model)
+        cpr.setRenderable(this.model)
 
+                .animate(true)
 
-                .animate(false).start();
+                .start();
 
-        model.select();
+        cpr.select();
 
 //        Node titleNode = new Node();
 //        titleNode.setParent(model);
