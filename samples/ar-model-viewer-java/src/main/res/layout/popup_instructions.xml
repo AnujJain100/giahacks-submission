@@ -17,14 +17,42 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:fontFamily="@font/roboto"
         android:text="Instructions"
-        android:textStyle="bold"
-        android:textSize="18sp"
-        android:layout_marginBottom="8dp" />
+        android:textSize="24dp"
+        android:textStyle="bold" />
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="1. Click on Emergency for emergency options.\n2. Click on Practice for practice options."
-        android:textSize="16sp" />
+        android:layout_marginTop="8dp"
+        android:fontFamily="@font/roboto"
+        android:text="Emergency:"
+        android:textSize="17dp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:fontFamily="@font/roboto"
+        android:text="1. Before anything, call emergency services (911 in USA) and explain what happened to them.\n2. Talk to Gemini to help diagnose the condition using the mic button in the bottom right corner of the screen.\n3. At any time click the chat icon in the bottom left corner to see a transcript of the chat conversation.\n4. Once the diagnosis is complete, follow the steps shown in AR to treat the patient until professionals arrive."
+        android:textSize="17dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:fontFamily="@font/roboto"
+        android:text="Practice:"
+        android:textSize="17dp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/roboto"
+        android:text="1. Choose a situation you wish to practice in.\n2. Chat with Gemini to ask questions and get feedback using the mic button in the bottom right corner of the screen.\n3. At any time click the chat icon in the bottom left corner to see a transcript of the chat conversation."
+        android:textSize="17dp" />
 </LinearLayout>

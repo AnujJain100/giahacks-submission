@@ -12,6 +12,15 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
+        <ImageView
+            android:id="@+id/homeButton"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_margin="15dp"
+            android:layout_gravity="top|start"
+            android:src="@drawable/ic_home"
+            android:contentDescription="Home" />
+
         <!-- PreviewView for camera feed -->
         <androidx.camera.view.PreviewView
             android:id="@+id/camera_preview"
@@ -87,9 +96,9 @@
 
     <!-- Navigation Drawer -->
     <com.google.android.material.navigation.NavigationView
+        android:id="@+id/nav_view"
         android:layout_width="wrap_content"
         android:layout_height="match_parent"
-        android:id="@+id/nav_view"
         android:layout_gravity="start"
         android:background="@drawable/rounded_nav_view"
         app:itemIconTint="@color/lavender"
@@ -106,7 +115,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:padding="20dp"/>
+                android:padding="20dp" />
         </ScrollView>
     </com.google.android.material.navigation.NavigationView>
 </androidx.drawerlayout.widget.DrawerLayout>
