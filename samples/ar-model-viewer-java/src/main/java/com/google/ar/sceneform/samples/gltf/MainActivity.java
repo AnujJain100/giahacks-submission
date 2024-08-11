@@ -422,6 +422,15 @@ public class MainActivity extends AppCompatActivity implements
             }
         }
 
+        ImageView homeButton = findViewById(R.id.homeButton);
+        homeButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(MainActivity.this, LandingActivity.class);
+                startActivity(intent);
+                finish();
+            }
+        });
 
         arCoreSwitch = findViewById(R.id.arcore_switch);
         arCoreSwitch.setChecked(false);
