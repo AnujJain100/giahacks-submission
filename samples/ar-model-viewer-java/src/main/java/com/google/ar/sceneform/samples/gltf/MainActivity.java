@@ -2,15 +2,36 @@ package com.google.ar.sceneform.samples.gltf;
 
 import static android.app.PendingIntent.getActivity;
 import static com.google.ar.sceneform.rendering.HeadlessEngineWrapper.TAG;
+import static com.google.mlkit.vision.pose.PoseDetectorOptionsBase.CPU_GPU;
+//import android.graphics.Color;  // For Color.RED, Color.TRANSPARENT
+import android.graphics.PorterDuff;  // For PorterDuff.Mode.CLEAR
+import com.google.ar.sceneform.math.Vector3;
 
-import com.google.ar.core.Camera;
+import android.graphics.Paint;  // For Paint
+import android.graphics.Canvas;  // For Canvas
+import android.graphics.Bitmap;  // For Bitmap
+import androidx.annotation.OptIn;
+import androidx.camera.core.Camera;
+import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ExperimentalGetImage;
+import androidx.camera.core.ImageAnalysis;
+import androidx.camera.core.ImageProxy;
+import androidx.camera.core.Preview;
+import androidx.camera.lifecycle.ProcessCameraProvider;
+import androidx.camera.view.PreviewView;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+//import com.google.ar.core.Camera;
 import com.google.ar.core.Coordinates2d;
 import com.google.ar.core.Frame;
+import com.google.ar.core.TrackingState;
 import com.google.ar.core.exceptions.NotYetAvailableException;
 import com.google.ar.sceneform.FrameTime;
+import com.google.ar.sceneform.collision.Ray;
 import com.google.ar.sceneform.ux.VideoNode;
 import com.google.ar.sceneform.rendering.Color;
 
+import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
@@ -19,8 +40,14 @@ import java.util.List;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.ImageFormat;
+import android.graphics.Paint;
+import android.graphics.PorterDuff;
+import android.graphics.Rect;
 import android.graphics.RectF;
-import android.hardware.camera2.params.StreamConfigurationMap;
+import android.graphics.YuvImage;
 import android.media.MediaPlayer;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -36,6 +63,7 @@ import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.navigation.NavigationView;
+import com.google.common.util.concurrent.ListenableFuture;
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.pose.Pose;
 import com.google.mlkit.vision.pose.PoseDetection;
@@ -47,16 +75,6 @@ import android.content.ContentValues;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.SurfaceTexture;
-import android.hardware.camera2.CameraAccessException;
-import android.hardware.camera2.CameraCaptureSession;
-import android.hardware.camera2.CameraDevice;
-import android.hardware.camera2.CameraManager;
-import android.hardware.camera2.CameraMetadata;
-//import android.hardware.camera2.CameraOutputSession;
-//import android.hardware.camera2.CameraStateCallback;
-import android.hardware.camera2.CameraCharacteristics;
-import android.hardware.camera2.CameraCaptureSession.StateCallback;
-import android.hardware.camera2.CaptureRequest;
 import android.media.Image;
 import android.media.ImageReader;
 import android.net.Uri;
@@ -72,6 +90,7 @@ import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -110,14 +129,38 @@ import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity implements
         FragmentOnAttachListener,
         BaseArFragment.OnTapArPlaneListener,
         BaseArFragment.OnSessionConfigurationListener,
-        ArFragment.OnViewCreatedListener,
-        ImageReader.OnImageAvailableListener{
+        ArFragment.OnViewCreatedListener{
+//        ImageReader.OnImageAvailableListener{
     private InputImage inputImage;
+    private static final long WAIT_TIME_MS = 5000; // 5 seconds
+    private Handler handler = new Handler();
+    private boolean hasAnchored = false;
+    private long startTime = -1;
+    private ImageAnalysis imageAnalysis;
+    private ProcessCameraProvider cameraProvider;
+    private Anchor currentAnchor = null;
+    private AnchorNode anchorNode = null;
+    private TransformableNode modelNode = null;
+    private PreviewView previewView;
+    private Camera camera;
+    ArrayList<Pose> poseArrayList = new ArrayList<>();
+    ArrayList<Pose> poseArrayListNew = new ArrayList<>();
+    // Declare a timestamp variable to track the last update time
+    private long lastPoseUpdateTime = 0;
+    private static final long UPDATE_INTERVAL_MS = 1000; // 1 second in milliseconds
+    private ImageReader imageReader;
+    ExecutorService executor = Executors.newSingleThreadExecutor();
+
+    private HandlerThread backgroundThread;
+    private Handler backgroundHandler;
     private final List<MediaPlayer> mediaPlayers = new ArrayList<>();
     private int mode = R.id.menuPlainVideo;
     private String userQueryFromSpeech;
@@ -129,22 +172,29 @@ public class MainActivity extends AppCompatActivity implements
     private TextView geminiResponse;
     private Bitmap latestBitmap;
     private ImageView micButton;
-    private CameraManager cameraManager;
-    private CameraDevice cameraDevice;
-    private CameraCaptureSession cameraCaptureSession;
+    private Bitmap bitmap;
+    private Canvas canvas;
     private TextureView textureView;
     private ArFragment arFragment;
+    //person performing cpr
     private Renderable model;
+    //person checking breathing
+    private Renderable model2;
+
+    //spot location arrow
+    private Renderable model3;
+
+    //dot for neck
+    private Renderable model4;
+
     private ViewRenderable viewRenderable;
     private Switch arCoreSwitch;
-    ArrayList<Pose> poseArrayList = new ArrayList<>();
     private DrawerLayout drawerLayout;
     private boolean isListening = false;
     private LinearLayout chatBodyContainer;
     private ChatFutures chatModel;
     private HandlerThread handlerThread;
-    private Handler handler;
-    private boolean arMode = true; // Track whether we're in AR mode
+    private boolean arMode = false; // Track whether we're in AR mode
     private static final SparseIntArray ORIENTATIONS = new SparseIntArray();
     static {
         ORIENTATIONS.append(Surface.ROTATION_0, 90);
@@ -152,54 +202,47 @@ public class MainActivity extends AppCompatActivity implements
         ORIENTATIONS.append(Surface.ROTATION_180, 270);
         ORIENTATIONS.append(Surface.ROTATION_270, 180);
     }
+
+    private void heartAttackFunction(){
+        Log.d("HEART ATTACK FUNCTION", "HEART ATTACK CALLED");
+    }
+
     // Base pose detector with streaming frames, when depending on the pose-detection sdk
     PoseDetectorOptions options =
             new PoseDetectorOptions.Builder()
                     .setDetectorMode(PoseDetectorOptions.STREAM_MODE)
+                    .setPreferredHardwareConfigs(CPU_GPU)
                     .build();
-
-    Runnable RunMlkit = new Runnable() {
-        @Override
-        public void run() {
-            Bitmap bitmap = textureView.getBitmap();
-            if (bitmap != null) {
-                inputImage = InputImage.fromBitmap(bitmap, 0);
-
-                // Run ML Kit processing here
-                // Example: runTextRecognition(image);
-            } else {
-                Log.e("RunMlkit", "Bitmap is null");
-            }
-
-            if (inputImage != null) {
-
-                poseDetector.process(inputImage)
-                        .addOnSuccessListener(new OnSuccessListener<Pose>() {
-                            @Override
-                            public void onSuccess(Pose pose) {
-                                poseArrayList.add(pose);
-                                Log.d("pose", "Pose added");
-                            }
-                        })
-                        .addOnFailureListener(new OnFailureListener() {
-                            @Override
-                            public void onFailure(@NonNull Exception e) {
-                                Log.e("pose", "Failed to detect pose", e);
-                            }
-                        });
-            } else {
-                Log.e("RunMlkit", "InputImage is null");
-            }
-        }
-    };
     PoseDetector poseDetector = PoseDetection.getClient(options);
+
+    private void setupOverlay() {
+        // Initialize Bitmap with the same size as the PreviewView
+        previewView.post(() -> {
+            int width = previewView.getWidth();
+            int height = previewView.getHeight();
+            bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+            canvas = new Canvas(bitmap);
+            // Set Bitmap to an ImageView or similar view to display on top of the PreviewView
+            ImageView overlayImageView = findViewById(R.id.overlayImageView);
+            overlayImageView.setImageBitmap(bitmap);
+        });
+    }
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        // Clear existing anchor
+        if (currentAnchor != null) {
+            currentAnchor.detach();
+            currentAnchor = null;
+        }
+    }
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         setContentView(R.layout.activity_main);
         getSupportFragmentManager().addFragmentOnAttachListener(this);
-        textureView = findViewById(R.id.camera_preview);
         ttsTextView = findViewById(R.id.ttsTextView);
         chatBodyContainer = findViewById(R.id.chatResponseLayout);
         chatModel = getChatModel();
@@ -211,6 +254,7 @@ public class MainActivity extends AppCompatActivity implements
                 }
             }
         });
+
         if (savedInstanceState == null) {
             if (Sceneform.isSupported(this)) {
                 getSupportFragmentManager().beginTransaction()
@@ -219,18 +263,23 @@ public class MainActivity extends AppCompatActivity implements
             }
         }
 
+
         arCoreSwitch = findViewById(R.id.arcore_switch);
+        arCoreSwitch.setChecked(false);
         arCoreSwitch.setOnCheckedChangeListener(
                 (view, checked) -> {
                     Log.i(TAG, "Switching to " + (checked ? "AR" : "non-AR") + " mode.");
                     if (checked) {
+                        poseArrayListNew = poseArrayList;
                         arMode = true;
+
                         try {
                             resumeARCore();
                         } catch (Exception e) {
                             throw new RuntimeException(e);
                         }
                     } else {
+                        poseArrayListNew = null;
                         arMode = false;
                         pauseARCore();
                         resumeCamera2();
@@ -239,12 +288,6 @@ public class MainActivity extends AppCompatActivity implements
         loadModels();
         drawerLayout = findViewById(R.id.drawer_layout);
         NavigationView navigationView = findViewById(R.id.nav_view);
-
-        // Initialize and start the handler thread
-        handlerThread = new HandlerThread("MLKitThread");
-        handlerThread.start();
-        handler = new Handler(handlerThread.getLooper());
-        handler.post(RunMlkit);
 
         micButton = findViewById(R.id.micButton);
 
@@ -294,7 +337,6 @@ public class MainActivity extends AppCompatActivity implements
 
             }
 
-
             @Override
             public void onRmsChanged(float rmsdB) {}
 
@@ -331,10 +373,12 @@ public class MainActivity extends AppCompatActivity implements
                     populateChatBody("You", query);
 
 
-                    GeminiPro.getResponse(chatModel, query, textureView.getBitmap(), new ResponseCallback() {
+                    GeminiPro.getResponse(chatModel, query, latestBitmap, new ResponseCallback() {
                         @Override
                         public void onResponse(String response) {
-
+                            if (response.contains("heart attack")){
+                                heartAttackFunction();
+                            }
                             populateChatBody("Gemini", response);
                             tts.speak(response, TextToSpeech.QUEUE_ADD, null);
                         }
@@ -361,9 +405,7 @@ public class MainActivity extends AppCompatActivity implements
             @Override
             public void onEvent(int eventType, Bundle params) {}
         });
-        //startCamera();
-//        querySubmitButton.setOnClickListener(v -> {
-//        });
+
 
     }
 
@@ -391,52 +433,127 @@ public class MainActivity extends AppCompatActivity implements
         micButton.setImageResource(R.drawable.mic_green); // Change mic icon back
     }
 
+
     private void resumeCamera2() {
+
         findViewById(R.id.camera_preview).setVisibility(View.VISIBLE);
         findViewById(R.id.arFragment).setVisibility(View.GONE);
+        startCamera();  // Use CameraX's startCamera method
+    }
+    private void startCamera() {
+        previewView = findViewById(R.id.camera_preview);
+        setupOverlay();
+        ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(this);
+        cameraProviderFuture.addListener(() -> {
+            try {
+                cameraProvider = cameraProviderFuture.get();
+                bindCameraX(cameraProvider);
+            } catch (ExecutionException | InterruptedException e) {
+                e.printStackTrace();
+            }
+        }, ContextCompat.getMainExecutor(this));
+    }
+    private void bindCameraX(ProcessCameraProvider cameraProvider) {
+        // Unbind use cases before rebinding
+        cameraProvider.unbindAll();
 
-        if (textureView.isAvailable()) {
-            startCamera();
-        } else {
-            textureView.setSurfaceTextureListener(textureListener);
+        // Camera Selector
+        CameraSelector cameraSelector = new CameraSelector.Builder()
+                .requireLensFacing(CameraSelector.LENS_FACING_BACK)
+                .build();
 
-        }
+        // Preview
+        Preview preview = new Preview.Builder().build();
+        preview.setSurfaceProvider(previewView.getSurfaceProvider());
+
+        // Image Analysis
+        imageAnalysis = new ImageAnalysis.Builder()
+                .setTargetResolution(new Size(1920, 1080))
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .build();
+
+        imageAnalysis.setAnalyzer(executor, imageProxy -> {
+            // Perform pose detection or other processing on the image
+            processImage(imageProxy);
+            //imageProxy.close(); // Close the image once you are done processing
+        });
+
+        // Bind to lifecycle
+        camera = cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalysis);
     }
 
-    private void startCamera() {
-        CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
-        try {
-            String cameraId = manager.getCameraIdList()[0]; // Use the first camera
-            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-                // TODO: Consider calling
-                //    ActivityCompat#requestPermissions
-                // here to request the missing permissions, and then overriding
-                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-                //                                          int[] grantResults)
-                // to handle the case where the user grants the permission. See the documentation
-                // for ActivityCompat#requestPermissions for more details.
-                return;
-            }
-            CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
-            StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
-            mPreviewSize = map.getOutputSizes(SurfaceTexture.class)[0];
-
-            configureTransform(textureView.getWidth(), textureView.getHeight());
-            manager.openCamera(cameraId, stateCallback, null);
-        } catch (CameraAccessException e) {
-            e.printStackTrace();
+    @OptIn(markerClass = ExperimentalGetImage.class)
+    private void processImage(ImageProxy imageProxy) {
+        // Get an InputImage from the imageProxy
+        Image mediaImage = imageProxy.getImage();
+        // Check if the image is null
+        if (mediaImage == null) {
+            imageProxy.close(); // Close the imageProxy if the image is null
+            return;
         }
+        latestBitmap = imageToBitmap(mediaImage);
+        InputImage image = InputImage.fromMediaImage(imageProxy.getImage(), imageProxy.getImageInfo().getRotationDegrees());
+
+
+        // Process the image
+        poseDetector.process(image)
+                .addOnSuccessListener(
+                        pose -> {
+                            // Handle the pose object here
+                            poseArrayList.add(pose);
+
+                            // Clear previous drawings
+                            if (canvas != null) {
+                                canvas.drawColor(android.graphics.Color.TRANSPARENT, PorterDuff.Mode.CLEAR);
+                            }
+
+                            // Drawing on Canvas
+                            if (bitmap != null && canvas != null) {
+                                Paint paint = new Paint();
+                                paint.setColor(android.graphics.Color.RED);
+                                paint.setStyle(Paint.Style.FILL);
+                                paint.setStrokeWidth(10);
+
+                                List<PoseLandmark> landmarks = pose.getAllPoseLandmarks();
+                                for (PoseLandmark landmark : landmarks) {
+                                    // Convert landmark coordinates to screen coordinates
+                                    int x = (int) (landmark.getPosition().x * previewView.getWidth() / image.getWidth());
+                                    int y = (int) (landmark.getPosition().y * previewView.getHeight() / image.getHeight());
+
+                                    // Draw a dot on the Canvas
+                                    canvas.drawCircle(x, y, 10, paint);
+                                }
+
+                                // Trigger a redraw
+                                previewView.postInvalidate();
+                            }
+
+                        })
+                .addOnFailureListener(
+                        e -> {
+                            // Task failed with an exception
+                            e.printStackTrace();
+                        })
+                .addOnCompleteListener(
+                        task -> imageProxy.close());  // Close the image when done
     }
 
     private void resumeARCore() throws Exception {
         findViewById(R.id.camera_preview).setVisibility(View.GONE);
         findViewById(R.id.arFragment).setVisibility(View.VISIBLE);
+        if (cameraProvider != null) {
+            cameraProvider.unbindAll();
+        }
         if (arFragment != null) {
+            // Clear existing anchor
+            if (currentAnchor != null) {
+                currentAnchor.detach();
+                currentAnchor = null;
+            }
             arFragment.getArSceneView().resume(); // Resume ARCore session
         }
         // Additional ARCore setup if needed
     }
-
 
 
     @Override
@@ -454,38 +571,11 @@ public class MainActivity extends AppCompatActivity implements
         if (session.isDepthModeSupported(Config.DepthMode.AUTOMATIC)) {
             config.setDepthMode(Config.DepthMode.AUTOMATIC);
         }
+        session.configure(config);
     }
 
-    // Method to unproject normalized device coordinates to 3D world coordinates
-    float[] unproject(Frame frame, float u, float v, float depth) {
-        float[] result = new float[4];
 
-        // Define the normalized device coordinates
-        float[] ndc = {u * 2 - 1, v * 2 - 1, 1, 1};
 
-        // Retrieve the projection and view matrices
-        float[] projMatrix = new float[16];
-        frame.getCamera().getProjectionMatrix(projMatrix, 0, 0.1f, 100.0f);
-
-        float[] viewMatrix = new float[16];
-        frame.getCamera().getViewMatrix(viewMatrix, 0);
-
-        // Inverse of the projection * view matrix
-        float[] invProjViewMatrix = new float[16];
-        android.opengl.Matrix.multiplyMM(invProjViewMatrix, 0, projMatrix, 0, viewMatrix, 0);
-        android.opengl.Matrix.invertM(invProjViewMatrix, 0, invProjViewMatrix, 0);
-
-        // Apply the inverse to the NDC coordinates
-        android.opengl.Matrix.multiplyMV(result, 0, invProjViewMatrix, 0, ndc, 0);
-
-        // Scale the resulting vector by the depth value
-        for (int i = 0; i < 3; i++) {
-            result[i] *= depth;
-        }
-
-        // Return the 3D coordinates
-        return new float[]{result[0], result[1], result[2]};
-    }
     @Override
     public void onViewCreated(ArSceneView arSceneView) {
         arFragment.setOnViewCreatedListener(null);
@@ -494,19 +584,59 @@ public class MainActivity extends AppCompatActivity implements
         arSceneView.setFrameRateFactor(SceneView.FrameRate.FULL);
         // Add the update listener
         arSceneView.getScene().addOnUpdateListener(this::onFrameUpdate);
+
+    }
+    private float[] computeRayPlaneIntersection(Ray ray, float planeDepth) {
+        // Get ray origin and direction as Vector3
+        Vector3 origin = ray.getOrigin();
+        Vector3 direction = ray.getDirection();
+
+        // Convert Vector3 to float[] for easier manipulation
+        float[] originArray = { origin.x, origin.y, origin.z };
+        float[] directionArray = { direction.x, direction.y, direction.z };
+
+        // Check if ray direction is zero to avoid division by zero
+        if (directionArray[2] == 0) {
+            Log.e("RayIntersection", "Ray direction is zero in the Z axis.");
+            return null;
+        }
+
+        // Compute the intersection
+        float t = (planeDepth - originArray[2]) / directionArray[2]; // Assuming the plane is parallel to the X-Y plane
+
+        // Compute the intersection point
+        return new float[]{
+                originArray[0] + t * directionArray[0],
+                originArray[1] + t * directionArray[1],
+                planeDepth
+        };
     }
     // This method will be called every frame
     private void onFrameUpdate(FrameTime frameTime) {
+        Log.d("FrameUpdate", "A NEW FRAME HAS BEEN RENDERED");
+
+        // Get the AR session and frame
         Session session = arFragment.getArSceneView().getSession();
-
         Frame frame = arFragment.getArSceneView().getArFrame();
-        Camera camera = frame.getCamera();
 
+        // Check if the frame is valid
+        if (frame == null) {
+            Log.e("FrameUpdate", "Frame is null.");
+            return;
+        }
 
-        if (!poseArrayList.isEmpty()) {
+        // Ensure ARCore is tracking
+        if (frame.getCamera().getTrackingState() != TrackingState.TRACKING) {
+            Log.e("ARCore", "ARCore is not tracking.");
+            return;
+        }
+
+        // Check if pose array is not empty
+        if (!poseArrayListNew.isEmpty()) {
             Log.d("pose array", "is not empty");
 
-            com.google.mlkit.vision.pose.Pose pose = poseArrayList.get(0);
+            Pose pose = poseArrayListNew.get(0);
+
             PoseLandmark leftShoulder = pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER);
             PoseLandmark rightShoulder = pose.getPoseLandmark(PoseLandmark.RIGHT_SHOULDER);
             PoseLandmark leftHip = pose.getPoseLandmark(PoseLandmark.LEFT_HIP);
@@ -515,79 +645,77 @@ public class MainActivity extends AppCompatActivity implements
             if (leftShoulder != null && rightShoulder != null && leftHip != null && rightHip != null) {
                 float chestX = (leftShoulder.getPosition().x + rightShoulder.getPosition().x + leftHip.getPosition().x + rightHip.getPosition().x) / 4;
                 float chestY = (leftShoulder.getPosition().y + rightShoulder.getPosition().y + leftHip.getPosition().y + rightHip.getPosition().y) / 4 * 0.75f + (leftShoulder.getPosition().y + rightShoulder.getPosition().y) / 4 * 0.25f;
-                float u = (float) chestX / (float) frame.getCamera().getImageIntrinsics().getImageDimensions()[0];
-                float v = (float) chestY / (float) frame.getCamera().getImageIntrinsics().getImageDimensions()[1];
-                // Convert NDC to 3D world coordinates using the depth value
 
-                try {
+                if (!hasAnchored) {
+                    long currentTime = System.currentTimeMillis();
 
-                    // Convert CPU coordinates into depth map coordinates
-                    Pair<Integer, Integer> depthCoordinates = transformToDepthCoordinates(frame, chestX, chestY);
-                    if (depthCoordinates != null) {
-                        int depthX = depthCoordinates.first;
-                        int depthY = depthCoordinates.second;
-
-                        rawDepth = frame.acquireRawDepthImage16Bits();
-                        if (depthX >= 0 && depthY >= 0 && depthX < rawDepth.getWidth() && depthY < rawDepth.getHeight()) {
-                            int z = getMillimetersDepth(rawDepth, depthX, depthY);
-                            float depthZ = z / 1000.0f;
-                            // Convert NDC to 3D world coordinates using the depth value
-                            float[] xyz = unproject(frame, u, v, depthZ);
-
-                            // Create ARCore pose from camera space coordinates
-                            com.google.ar.core.Pose landmarkPose = com.google.ar.core.Pose.makeTranslation(xyz[0], xyz[1], xyz[2]);
-
-                            // Create an anchor at the landmark's position
-                            Anchor anchor = session.createAnchor(landmarkPose);
-
-                            // Your code here. For example:
-                            AnchorNode anchorNode = new AnchorNode(anchor);
-                            anchorNode.setParent(arFragment.getArSceneView().getScene());
-                            TransformableNode modelNode = new TransformableNode(arFragment.getTransformationSystem());
-                            modelNode.setParent(anchorNode);
-
-                            final int rawResId;
-                            final Color chromaKeyColor;
-                            if (mode == R.id.menuPlainVideo) {
-                                rawResId = R.raw.timer_16;
-                                chromaKeyColor = null;
-                            } else {
-                                rawResId = R.raw.timer_16_v2;
-                                chromaKeyColor = new Color(0.1843f, 1.0f, 0.098f);
-                            }
-                            MediaPlayer player = MediaPlayer.create(this, rawResId);
-                            player.setLooping(true);
-                            player.start();
-                            mediaPlayers.add(player);
-                            VideoNode videoNode = new VideoNode(this, player, chromaKeyColor, new VideoNode.Listener() {
-                                @Override
-                                public void onCreated(VideoNode videoNode) {
-                                }
-
-                                @Override
-                                public void onError(Throwable throwable) {
-                                    Toast.makeText(MainActivity.this, "Unable to load material", Toast.LENGTH_LONG).show();
-                                }
-                            });
-                            videoNode.setParent(modelNode);
-
-                            // If you want that the VideoNode is always looking to the
-                            // Camera (You) comment the next line out. Use it mainly
-                            // if you want to display a Video. The use with activated
-                            // ChromaKey might look odd.
-                            //videoNode.setRotateAlwaysToCamera(true);
-
-                            modelNode.select();
-
-                            Log.d("ARCore", "Anchor added at coordinates:");
-                        } else {
-                            Log.e("DepthCoordinates", "Invalid depth coordinates: (" + depthX + ", " + depthY + ")");
-                        }
-                    } else {
-                        Log.e("DepthCoordinates", "Transform to depth coordinates failed.");
+                    if (startTime == -1) {
+                        startTime = currentTime;
                     }
-                } catch (NotYetAvailableException e) {
-                    Log.e("DepthImage", "Depth image not available", e);
+
+                    if (currentTime - startTime >= WAIT_TIME_MS) {
+                        float u = (float) chestX / (float) frame.getCamera().getImageIntrinsics().getImageDimensions()[0];
+                        float v = (float) chestY / (float) frame.getCamera().getImageIntrinsics().getImageDimensions()[1];
+
+                        try {
+                            // Acquire raw depth image
+                            Image rawDepth = null;
+                            try {
+                                rawDepth = frame.acquireRawDepthImage16Bits();
+                            } catch (NotYetAvailableException e) {
+                                Log.e("DepthImage", "Depth image not available", e);
+                                return;
+                            }
+
+                            float[] cpuCoordinates = new float[] {chestX, chestY};
+                            float[] textureCoordinates = new float[2];
+                            frame.transformCoordinates2d(
+                                    Coordinates2d.VIEW,
+                                    cpuCoordinates,
+                                    Coordinates2d.TEXTURE_NORMALIZED,
+                                    textureCoordinates);
+
+                            int depthX = (int) (textureCoordinates[0] * rawDepth.getWidth());
+                            int depthY = (int) (textureCoordinates[1] * rawDepth.getHeight());
+
+                            if (depthX >= 0 && depthX < rawDepth.getWidth() && depthY >= 0 && depthY < rawDepth.getHeight()) {
+                                int z = getMillimetersDepth(rawDepth, depthX, depthY);
+                                float depthZ = z / 1000.0f;
+
+                                Ray ray = arFragment.getArSceneView().getScene().getCamera().screenPointToRay(chestX, chestY);
+                                float[] intersection = computeRayPlaneIntersection(ray, depthZ);
+
+                                if (intersection != null) {
+                                    if (currentAnchor == null) {
+                                        // Create ARCore pose from camera space coordinates
+                                        com.google.ar.core.Pose landmarkPose = com.google.ar.core.Pose.makeTranslation(intersection[0], intersection[1], intersection[2]);
+
+                                        // Create an anchor at the landmark's position
+                                        currentAnchor = session.createAnchor(landmarkPose);
+
+                                        // Create and set up anchor node and model node
+                                        AnchorNode anchorNode = new AnchorNode(currentAnchor);
+                                        anchorNode.setParent(arFragment.getArSceneView().getScene());
+                                        TransformableNode model = new TransformableNode(arFragment.getTransformationSystem());
+                                        model.setParent(anchorNode);
+                                        model.setRenderable(this.model3)
+                                                .animate(true).start();
+                                        model.select();
+                                        Log.d("ARCore", "Anchor added at coordinates:");
+                                        hasAnchored = true;
+                                    } else {
+                                        Log.d("ARCore", "Anchor already exists, not updating pose.");
+                                    }
+                                } else {
+                                    Log.e("DepthImage", "Depth image acquisition failed.");
+                                }
+                            } else {
+                                Log.e("DepthImage", "Depth coordinates are out of bounds: (" + depthX + ", " + depthY + ")");
+                            }
+                        } catch (Exception e) {
+                            Log.e("AnchorCreation", "Exception during anchor creation", e);
+                        }
+                    }
                 }
             } else {
                 Log.e("pose landmarks", "One or more landmarks are null");
@@ -595,9 +723,13 @@ public class MainActivity extends AppCompatActivity implements
         } else {
             Log.d("pose array", "is empty");
         }
-        // Update your UI elements, run pose detection, etc.
+
         Log.d("FrameUpdate", "A new frame has been rendered");
     }
+
+
+
+
 
 
     public void loadModels() {
@@ -611,6 +743,54 @@ public class MainActivity extends AppCompatActivity implements
                     MainActivity activity = weakActivity.get();
                     if (activity != null) {
                         activity.model = model;
+                    }
+                })
+                .exceptionally(throwable -> {
+                    Toast.makeText(
+                            this, "Unable to load model", Toast.LENGTH_LONG).show();
+                    return null;
+                });
+        ModelRenderable.builder()
+                .setSource(this, Uri.parse("file:///android_asset/person_checking_breath.glb")) // Update this line
+                .setIsFilamentGltf(true)
+                .setAsyncLoadEnabled(true)
+                .build()
+                .thenAccept(model -> {
+                    MainActivity activity = weakActivity.get();
+                    if (activity != null) {
+                        activity.model2 = model;
+                    }
+                })
+                .exceptionally(throwable -> {
+                    Toast.makeText(
+                            this, "Unable to load model", Toast.LENGTH_LONG).show();
+                    return null;
+                });
+        ModelRenderable.builder()
+                .setSource(this, Uri.parse("file:///android_asset/arrow_circle.glb")) // Update this line
+                .setIsFilamentGltf(true)
+                .setAsyncLoadEnabled(true)
+                .build()
+                .thenAccept(model -> {
+                    MainActivity activity = weakActivity.get();
+                    if (activity != null) {
+                        activity.model3 = model;
+                    }
+                })
+                .exceptionally(throwable -> {
+                    Toast.makeText(
+                            this, "Unable to load model", Toast.LENGTH_LONG).show();
+                    return null;
+                });
+        ModelRenderable.builder()
+                .setSource(this, Uri.parse("file:///android_asset/pulse_dot.glb")) // Update this line
+                .setIsFilamentGltf(true)
+                .setAsyncLoadEnabled(true)
+                .build()
+                .thenAccept(model -> {
+                    MainActivity activity = weakActivity.get();
+                    if (activity != null) {
+                        activity.model4 = model;
                     }
                 })
                 .exceptionally(throwable -> {
@@ -649,152 +829,83 @@ public class MainActivity extends AppCompatActivity implements
         AnchorNode anchorNode = new AnchorNode(anchor);
         anchorNode.setParent(arFragment.getArSceneView().getScene());
 
-//        // Create the transformable model and add it to the anchor.
-//        TransformableNode model = new TransformableNode(arFragment.getTransformationSystem());
-//        model.setParent(anchorNode);
-//        model.setRenderable(this.model)
-//                .animate(true).start();
-//        model.select();
-//
+        // Create the transformable model and add it to the anchor.
+        TransformableNode model = new TransformableNode(arFragment.getTransformationSystem());
+        model.setParent(anchorNode);
+        model.setRenderable(this.model3)
+                .animate(true).start();
+        model.select();
+
 //        Node titleNode = new Node();
 //        titleNode.setParent(model);
 //        titleNode.setEnabled(false);
 //        titleNode.setLocalPosition(new Vector3(0.0f, 1.0f, 0.0f));
 //        titleNode.setRenderable(viewRenderable);
 //        titleNode.setEnabled(true);
+
         // Create the transformable model and add it to the anchor.
-        TransformableNode modelNode = new TransformableNode(arFragment.getTransformationSystem());
-        modelNode.setParent(anchorNode);
-
-        final int rawResId;
-        final Color chromaKeyColor;
-        if (mode == R.id.menuPlainVideo) {
-            rawResId = R.raw.timer_16;
-            chromaKeyColor = null;
-        } else {
-            rawResId = R.raw.timer_16_v2;
-            chromaKeyColor = new Color(0.1843f, 1.0f, 0.098f);
-        }
-        MediaPlayer player = MediaPlayer.create(this, rawResId);
-        player.setLooping(true);
-        player.start();
-        mediaPlayers.add(player);
-        VideoNode videoNode = new VideoNode(this, player, chromaKeyColor, new VideoNode.Listener() {
-            @Override
-            public void onCreated(VideoNode videoNode) {
-            }
-
-            @Override
-            public void onError(Throwable throwable) {
-                Toast.makeText(MainActivity.this, "Unable to load material", Toast.LENGTH_LONG).show();
-            }
-        });
-        videoNode.setParent(modelNode);
-
-        // If you want that the VideoNode is always looking to the
-        // Camera (You) comment the next line out. Use it mainly
-        // if you want to display a Video. The use with activated
-        // ChromaKey might look odd.
-        //videoNode.setRotateAlwaysToCamera(true);
-
-        modelNode.select();
-    }
-    private final TextureView.SurfaceTextureListener textureListener = new TextureView.SurfaceTextureListener() {
-        @Override
-        public void onSurfaceTextureAvailable(@NonNull SurfaceTexture surface, int width, int height) {
-            startCamera();
-            configureTransform(width, height);
-
-
-        }
-
-        @Override
-        public void onSurfaceTextureSizeChanged(@NonNull SurfaceTexture surface, int width, int height) {
-            // Handle surface texture size change if needed
-           // configureTransform(width, height);
-
-        }
-
-        @Override
-        public boolean onSurfaceTextureDestroyed(@NonNull SurfaceTexture surface) {
-            // Handle surface texture destruction if needed
-            return true;
-        }
-
-        @Override
-        public void onSurfaceTextureUpdated(@NonNull SurfaceTexture surface) {
-            // Handle surface texture update if needed
-        }
-    };
-
-    private final CameraDevice.StateCallback stateCallback = new CameraDevice.StateCallback() {
-        @Override
-        public void onOpened(@NonNull CameraDevice camera) {
-            cameraDevice = camera;
-            createCameraCaptureSession();
-        }
-
-        @Override
-        public void onDisconnected(@NonNull CameraDevice camera) {
-            camera.close();
-            cameraDevice = null;
-        }
-
-        @Override
-        public void onError(@NonNull CameraDevice camera, int error) {
-            camera.close();
-            cameraDevice = null;
-        }
-    };
-
-    private void createCameraCaptureSession() {
-        try {
-            SurfaceTexture texture = textureView.getSurfaceTexture();
-            assert texture != null;
-            texture.setDefaultBufferSize(2282, 1080); // Set the preview size
-            Surface previewSurface = new Surface(texture);
-
-            CaptureRequest.Builder builder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
-            builder.addTarget(previewSurface);
-            setUpCameraOutputs();
-            //configureTransform(textureView.getWidth(), textureView.getHeight());
-
-            cameraDevice.createCaptureSession(
-                    List.of(previewSurface),
-                    new CameraCaptureSession.StateCallback() {
-                        @Override
-                        public void onConfigured(@NonNull CameraCaptureSession session) {
-                            cameraCaptureSession = session;
-                            try {
-                                builder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
-                                cameraCaptureSession.setRepeatingRequest(builder.build(), null, null);
-                            } catch (CameraAccessException e) {
-                                e.printStackTrace();
-                            }
-                        }
-
-                        @Override
-                        public void onConfigureFailed(@NonNull CameraCaptureSession session) {
-                            Toast.makeText(MainActivity.this, "Failed to configure camera.", Toast.LENGTH_SHORT).show();
-                        }
-                    },
-                    null
-            );
-        } catch (CameraAccessException e) {
-            e.printStackTrace();
-        }
+//        TransformableNode modelNode = new TransformableNode(arFragment.getTransformationSystem());
+//        modelNode.setParent(anchorNode);
+//
+//        final int rawResId;
+//        final Color chromaKeyColor;
+//        if (mode == R.id.menuPlainVideo) {
+//            rawResId = R.raw.timer_16;
+//            chromaKeyColor = null;
+//        } else {
+//            rawResId = R.raw.timer_16_v2;
+//            chromaKeyColor = new Color(0.1843f, 1.0f, 0.098f);
+//        }
+//        MediaPlayer player = MediaPlayer.create(this, rawResId);
+//        player.setLooping(true);
+//        player.start();
+//        mediaPlayers.add(player);
+//        VideoNode videoNode = new VideoNode(this, player, chromaKeyColor, new VideoNode.Listener() {
+//            @Override
+//            public void onCreated(VideoNode videoNode) {
+//            }
+//
+//            @Override
+//            public void onError(Throwable throwable) {
+//                Toast.makeText(MainActivity.this, "Unable to load material", Toast.LENGTH_LONG).show();
+//            }
+//        });
+//        videoNode.setParent(modelNode);
+//
+//        // If you want that the VideoNode is always looking to the
+//        // Camera (You) comment the next line out. Use it mainly
+//        // if you want to display a Video. The use with activated
+//        // ChromaKey might look odd.
+//        //videoNode.setRotateAlwaysToCamera(true);
+//
+//        modelNode.select();
     }
 
-    @Override
-    public void onImageAvailable(ImageReader imageReader) {
-        Image image = imageReader.acquireLatestImage();
-        if (image == null) {
-            Log.w(ContentValues.TAG, "onImageAvailable: Skipping null image.");
-            return;
-        }
 
+    public Bitmap imageToBitmap(Image image) {
+        ByteBuffer yBuffer = image.getPlanes()[0].getBuffer();
+        ByteBuffer uBuffer = image.getPlanes()[1].getBuffer();
+        ByteBuffer vBuffer = image.getPlanes()[2].getBuffer();
 
+        int ySize = yBuffer.remaining();
+        int uSize = uBuffer.remaining();
+        int vSize = vBuffer.remaining();
+
+        byte[] nv21 = new byte[ySize + uSize + vSize];
+
+        // U and V are swapped
+        yBuffer.get(nv21, 0, ySize);
+        vBuffer.get(nv21, ySize, vSize);
+        uBuffer.get(nv21, ySize + vSize, uSize);
+
+        YuvImage yuvImage = new YuvImage(nv21, ImageFormat.NV21, image.getWidth(), image.getHeight(), null);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        yuvImage.compressToJpeg(new Rect(0, 0, image.getWidth(), image.getHeight()), 100, out);
+        byte[] imageBytes = out.toByteArray();
+        return BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
     }
+
+
     public void populateChatBody(String userName, String message) {
         LayoutInflater inflater = (LayoutInflater) getSystemService(Context.LAYOUT_INFLATER_SERVICE);
         View view = inflater.inflate(R.layout.chat_message_block, null);
@@ -819,72 +930,6 @@ public class MainActivity extends AppCompatActivity implements
 
         return modelFutures.startChat();
     }
-    private void setUpCameraOutputs() {
-        CameraManager manager = (CameraManager) getSystemService(CAMERA_SERVICE);
-        try {
-            String cameraId = manager.getCameraIdList()[0];
-            CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
-            int sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
-            int rotation = getWindowManager().getDefaultDisplay().getRotation();
-            boolean swappedDimensions = false;
-
-            switch (rotation) {
-                case Surface.ROTATION_0:
-                case Surface.ROTATION_180:
-                    if (sensorOrientation == 90 || sensorOrientation == 270) {
-                        swappedDimensions = true;
-                    }
-                    break;
-                case Surface.ROTATION_90:
-                case Surface.ROTATION_270:
-                    if (sensorOrientation == 0 || sensorOrientation == 180) {
-                        swappedDimensions = true;
-                    }
-                    break;
-                default:
-                    Log.e(TAG, "Display rotation is invalid: " + rotation);
-            }
-
-            int width = textureView.getWidth();
-            int height = textureView.getHeight();
-            if (swappedDimensions) {
-                width = textureView.getHeight();
-                height = textureView.getWidth();
-            }
-
-            //configureTransform(width, height);
-
-        } catch (CameraAccessException e) {
-            e.printStackTrace();
-        }
-    }
-    // Method to configure the transform for TextureView
-    private void configureTransform(int viewWidth, int viewHeight) {
-        Activity activity = MainActivity.this;
-        if (null == textureView || null == mPreviewSize || null == activity) {
-            return;
-        }
-        int rotation = activity.getWindowManager().getDefaultDisplay().getRotation();
-        Matrix matrix = new Matrix();
-        RectF viewRect = new RectF(0, 0, viewWidth, viewHeight);
-        RectF bufferRect = new RectF(0, 0, mPreviewSize.getHeight(), mPreviewSize.getWidth());
-        float centerX = viewRect.centerX();
-        float centerY = viewRect.centerY();
-
-        if (Surface.ROTATION_90 == rotation || Surface.ROTATION_270 == rotation) {
-            bufferRect.offset(centerX - bufferRect.centerX(), centerY - bufferRect.centerY());
-            matrix.setRectToRect(viewRect, bufferRect, Matrix.ScaleToFit.FILL);
-            float scale = Math.max(
-                    (float) viewHeight / mPreviewSize.getHeight(),
-                    (float) viewWidth / mPreviewSize.getWidth());
-            matrix.postScale(scale, scale, centerX, centerY);
-            matrix.postRotate(90 * (rotation - 2), centerX, centerY);
-        } else if (Surface.ROTATION_180 == rotation) {
-            matrix.postRotate(180, centerX, centerY);
-        }
-        textureView.setTransform(matrix);
-    }
-
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -932,6 +977,12 @@ public class MainActivity extends AppCompatActivity implements
             mediaPlayer.stop();
             mediaPlayer.reset();
         }
+        Session session = arFragment.getArSceneView().getSession();
+        // Stop the ARCore session if it exists
+        if (session != null) {
+            session.close();
+            session = null;
+        }
 
     }
 
@@ -944,36 +995,6 @@ public class MainActivity extends AppCompatActivity implements
         ByteBuffer buffer = plane.getBuffer().order(ByteOrder.nativeOrder());
         return Short.toUnsignedInt(buffer.getShort(byteIndex));
     }
-    private Pair<Integer, Integer> transformToDepthCoordinates(Frame frame, float chestX, float chestY) throws NotYetAvailableException {
-        // Acquire the raw depth image from the frame
-        Image rawDepth = frame.acquireRawDepthImage16Bits();
-
-        // Create an array for the CPU coordinates
-        float[] cpuCoordinates = new float[] {chestX, chestY};
-
-        // Create an array for the texture coordinates
-        float[] textureCoordinates = new float[2];
-
-        // Transform the CPU coordinates to texture coordinates
-        frame.transformCoordinates2d(
-                Coordinates2d.IMAGE_PIXELS,
-                cpuCoordinates,
-                Coordinates2d.TEXTURE_NORMALIZED,
-                textureCoordinates
-        );
-
-        // Check if the texture coordinates are valid
-        if (textureCoordinates[0] < 0 || textureCoordinates[1] < 0) {
-            // There are no valid depth coordinates, because the coordinates in the CPU image are in the
-            // cropped area of the depth image.
-            return null;
-        }
-
-        return new Pair<>(
-                (int) (textureCoordinates[0] * rawDepth.getWidth()),
-                (int) (textureCoordinates[1] * rawDepth.getHeight()));
-    }
-
 
 
 }

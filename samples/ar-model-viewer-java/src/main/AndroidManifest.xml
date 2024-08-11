@@ -13,6 +13,8 @@
     <uses-feature
         android:glEsVersion="0x00030000"
         android:required="true" />
+    <uses-feature android:name="com.google.ar.core.depth" />
+
 
     <!-- Indicates that this app requires Google Play Services for AR ("AR Required") and results in
          the app only being visible in the Google Play Store on devices that support ARCore.

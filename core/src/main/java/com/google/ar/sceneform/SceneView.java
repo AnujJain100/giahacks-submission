@@ -20,6 +20,7 @@ import com.google.android.filament.LightManager;
 import com.google.android.filament.ToneMapper;
 import com.google.android.filament.View;
 import com.google.android.filament.utils.KTXLoader;
+import com.google.ar.core.exceptions.NotYetAvailableException;
 import com.google.ar.sceneform.rendering.Color;
 import com.google.ar.sceneform.rendering.EngineInstance;
 import com.google.ar.sceneform.rendering.Renderer;
@@ -447,7 +448,11 @@ public class SceneView extends SurfaceView implements Choreographer.FrameCallbac
 
         lastTick = tick;
 
-        doFrameNoRepost(frameTimeNanos);
+        try {
+            doFrameNoRepost(frameTimeNanos);
+        } catch (NotYetAvailableException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
@@ -457,7 +462,7 @@ public class SceneView extends SurfaceView implements Choreographer.FrameCallbac
      *
      * @hide
      */
-    public void doFrameNoRepost(long frameTimeNanos) {
+    public void doFrameNoRepost(long frameTimeNanos) throws NotYetAvailableException {
         // TODO: Display the tracked performance metrics in debug mode.
         if (debugEnabled) {
             frameTotalTracker.beginSample();
@@ -478,7 +483,7 @@ public class SceneView extends SurfaceView implements Choreographer.FrameCallbac
         }
     }
 
-    private void doUpdate(long frameTimeNanos) {
+    private void doUpdate(long frameTimeNanos) throws NotYetAvailableException {
         if (debugEnabled) {
             frameUpdateTracker.beginSample();
         }

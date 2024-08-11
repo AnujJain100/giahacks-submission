@@ -12,16 +12,28 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
-        <TextureView
+        <!-- PreviewView for camera feed -->
+        <androidx.camera.view.PreviewView
             android:id="@+id/camera_preview"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"/>
+            android:layout_height="match_parent"
+            android:visibility="gone"/>
 
+        <!-- FragmentContainerView for AR content -->
         <androidx.fragment.app.FragmentContainerView
             android:id="@+id/arFragment"
             android:layout_width="match_parent"
             android:layout_height="match_parent"/>
 
+        <!-- ImageView for overlay (added above other views) -->
+        <ImageView
+            android:id="@+id/overlayImageView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center"
+            android:visibility="visible"/>
+
+        <!-- Mic Button -->
         <ImageView
             android:id="@+id/micButton"
             android:layout_width="40dp"
@@ -31,6 +43,7 @@
             android:backgroundTint="#F9F8FA"
             android:src="@drawable/mic_green"/>
 
+        <!-- ARCore Switch -->
         <Switch
             android:id="@+id/arcore_switch"
             android:layout_width="wrap_content"
@@ -42,6 +55,7 @@
             android:switchPadding="8dp"
             android:text="AR"/>
 
+        <!-- TTS TextView -->
         <TextView
             android:id="@+id/ttsTextView"
             android:layout_width="wrap_content"
@@ -52,12 +66,14 @@
             android:textColor="@android:color/black"
             android:textSize="18sp"/>
 
+        <!-- Gemini Response TextView -->
         <TextView
             android:id="@+id/gemini_response"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"/>
 
+        <!-- Floating Action Button -->
         <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/fab_toggle_drawer"
             android:layout_width="wrap_content"
@@ -69,6 +85,7 @@
             android:backgroundTint="@android:color/darker_gray"/>
     </FrameLayout>
 
+    <!-- Navigation Drawer -->
     <com.google.android.material.navigation.NavigationView
         android:layout_width="wrap_content"
         android:layout_height="match_parent"

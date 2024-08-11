@@ -4,6 +4,7 @@ import android.view.MotionEvent;
 
 import androidx.annotation.Nullable;
 
+import com.google.ar.core.exceptions.NotYetAvailableException;
 import com.google.ar.sceneform.collision.Collider;
 import com.google.ar.sceneform.collision.CollisionSystem;
 import com.google.ar.sceneform.collision.Ray;
@@ -70,7 +71,7 @@ public class Scene extends NodeParent {
          *
          * @param frameTime provides time information for the current frame
          */
-        void onUpdate(FrameTime frameTime);
+        void onUpdate(FrameTime frameTime) throws NotYetAvailableException;
     }
 
     private static final String TAG = Scene.class.getSimpleName();
@@ -351,7 +352,11 @@ public class Scene extends NodeParent {
 
     void dispatchUpdate(FrameTime frameTime) {
         for (OnUpdateListener onUpdateListener : onUpdateListeners) {
-            onUpdateListener.onUpdate(frameTime);
+            try {
+                onUpdateListener.onUpdate(frameTime);
+            } catch (NotYetAvailableException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         callOnHierarchy(node -> node.dispatchUpdate(frameTime));
