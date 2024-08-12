@@ -142,14 +142,15 @@ public class MainActivity extends AppCompatActivity implements
         BaseArFragment.OnSessionConfigurationListener,
         ArFragment.OnViewCreatedListener{
 //        ImageReader.OnImageAvailableListener{
+    private long startTime;
+    private TransformableNode mainVideoNode;
     private InputImage inputImage;
     private static final long WAIT_TIME_MS = 5000; // 5 seconds
     private Handler handler = new Handler();
     private boolean isCPRScheduledForRemoval = false;
     private TransformableNode chestModelNode;
-
+    private TransformableNode currentModelNode;
     private boolean hasAnchored = false;
-    private long startTime = -1;
     private ImageAnalysis imageAnalysis;
     private ProcessCameraProvider cameraProvider;
     private Anchor currentAnchor = null;
@@ -212,7 +213,7 @@ public class MainActivity extends AppCompatActivity implements
     private TransformableNode cprGuy(Frame frame, Session session) {
         Anchor newMarkAnchor = session.createAnchor(
                 frame.getCamera().getPose()
-                        .compose(com.google.ar.core.Pose.makeTranslation(0, 0, -1f))
+                        .compose(com.google.ar.core.Pose.makeTranslation(0, -0.2f, -1.4f))
                         .extractTranslation());
         AnchorNode anchorNode = new AnchorNode(newMarkAnchor);
         anchorNode.setParent(arFragment.getArSceneView().getScene());
@@ -229,7 +230,7 @@ public class MainActivity extends AppCompatActivity implements
         // Create the transformable model and add it to the anchor.
         Anchor newMarkAnchor = session.createAnchor(
                 frame.getCamera().getPose()
-                        .compose(com.google.ar.core.Pose.makeTranslation(0, 0, -3f))
+                        .compose(com.google.ar.core.Pose.makeTranslation(0, 0.3f, -3f))
                         .extractTranslation());
         TransformableNode modelNode = new TransformableNode(arFragment.getTransformationSystem());
         AnchorNode anchorNode = new AnchorNode(newMarkAnchor);
@@ -318,53 +319,23 @@ public class MainActivity extends AppCompatActivity implements
     }
 
 
-//    private TransformableNode checkBreathing(Frame frame, Session session) {
-//        Anchor newMarkAnchor = session.createAnchor(
-//                frame.getCamera().getPose()
-//                        .compose(com.google.ar.core.Pose.makeTranslation(0, 0, -1f))
-//                        .extractTranslation());
-//        AnchorNode anchorNode = new AnchorNode(newMarkAnchor);
-//        anchorNode.setParent(arFragment.getArSceneView().getScene());
-//
-//        TransformableNode model = new TransformableNode(arFragment.getTransformationSystem());
-//        model.setParent(anchorNode);
-//        model.setRenderable(this.model2)
-//                .animate(true).start();
-//        model.select();
-//
-//        return model;
-//    }
-private TransformableNode checkBreathing(Frame frame, Session session) {
-    List<HitResult> hitResults = frame.hitTest(frame.getCamera().getDisplayOrientedPose().tx(), frame.getCamera().getDisplayOrientedPose().ty());
-
-    Anchor newMarkAnchor = null;
-    for (HitResult hit : hitResults) {
-        Trackable trackable = hit.getTrackable();
-        if (trackable instanceof Plane && ((Plane) trackable).isPoseInPolygon(hit.getHitPose())) {
-            newMarkAnchor = hit.createAnchor();
-            break;
-        }
-    }
-
-    if (newMarkAnchor == null) {
-        // If no plane was found, create an anchor in front of the camera
-        newMarkAnchor = session.createAnchor(
+    private TransformableNode checkBreathing(Frame frame, Session session) {
+        Anchor newMarkAnchor = session.createAnchor(
                 frame.getCamera().getPose()
-                        .compose(com.google.ar.core.Pose.makeTranslation(0, 0, -1f))
+                        .compose(com.google.ar.core.Pose.makeTranslation(0, -0.2f, -1.4f))
                         .extractTranslation());
+        AnchorNode anchorNode = new AnchorNode(newMarkAnchor);
+        anchorNode.setParent(arFragment.getArSceneView().getScene());
+
+        TransformableNode model = new TransformableNode(arFragment.getTransformationSystem());
+        model.setParent(anchorNode);
+        model.setRenderable(this.model2)
+                .animate(true).start();
+        model.select();
+
+        return model;
     }
 
-    AnchorNode anchorNode = new AnchorNode(newMarkAnchor);
-    anchorNode.setParent(arFragment.getArSceneView().getScene());
-
-    TransformableNode model = new TransformableNode(arFragment.getTransformationSystem());
-    model.setParent(anchorNode);
-    model.setRenderable(this.model2)
-            .animate(true).start();
-    model.select();
-
-    return model;
-}
 
     private void placeChest(Frame frame, Session session) {
         if (!poseArrayListNew.isEmpty()) {
@@ -414,7 +385,7 @@ private TransformableNode checkBreathing(Frame frame, Session session) {
 
                         chestModelNode = new TransformableNode(arFragment.getTransformationSystem());
                         chestModelNode.setParent(anchorNode);
-                        chestModelNode.setRenderable(this.model3)
+                        chestModelNode.setRenderable(this.model5)
                                 .animate(true).start();
                         chestModelNode.select();
 
@@ -475,7 +446,7 @@ private TransformableNode checkBreathing(Frame frame, Session session) {
                     if (intersection != null) {
                         float adjustedX = intersection[0] - 0.6096f;
 
-                        com.google.ar.core.Pose landmarkPose = com.google.ar.core.Pose.makeTranslation(adjustedX, intersection[1], intersection[2]);
+                        com.google.ar.core.Pose landmarkPose = com.google.ar.core.Pose.makeTranslation(intersection[0], intersection[1], intersection[2]);
                         Anchor anchor = session.createAnchor(landmarkPose);
                         AnchorNode anchorNode = new AnchorNode(anchor);
                         anchorNode.setParent(arFragment.getArSceneView().getScene());
@@ -509,6 +480,7 @@ private TransformableNode checkBreathing(Frame frame, Session session) {
         }
     }
     private void heartAttackFunction() {
+        startTime = System.currentTimeMillis();
         Log.e("HEART ATTACK FUNCTION", "HEART ATTACK CALLED");
 
         // Get the AR session and frame
@@ -526,11 +498,50 @@ private TransformableNode checkBreathing(Frame frame, Session session) {
             Log.e("ARCore", "ARCore is not tracking.");
             return;
         }
+        String query = "Point out any dangerous objects that are near the patient, point out any pillows or places to move the patient to a more comfortable sitting down position";
+        // Additional ARCore setup if needed
+        GeminiPro.getResponse(chatModel, query, latestBitmap, new ResponseCallback() {
+            @Override
+            public void onResponse(String response) {
+                if (response.contains("e")){
+                    try {
+                        resumeARCore();
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                    heartAttackFunction();
+                }
+                populateChatBody("Gemini", response);
+                tts.speak(response, TextToSpeech.QUEUE_ADD, null);
+            }
+
+
+            @Override
+            public void onError(Throwable throwable) {
+                populateChatBody("Gemini", "Sorry, I'm having trouble understanding that. Please try again.");
+            }
+        });
+//        //best settings for cpr guy
+//        Anchor newMarkAnchor = session.createAnchor(
+//                frame.getCamera().getPose()
+//                        .compose(com.google.ar.core.Pose.makeTranslation(0, -0.2f, -1.4f))
+//                        .extractTranslation());
+//        AnchorNode anchorNode = new AnchorNode(newMarkAnchor);
+//        anchorNode.setParent(arFragment.getArSceneView().getScene());
+//
+//        TransformableNode model = new TransformableNode(arFragment.getTransformationSystem());
+//        model.setParent(anchorNode);
+//        model.setRenderable(this.model)
+//                .animate(true).start();
+//        model.select();
+
+
+        //placeSpot(frame,session);
 
         // Delay the start of mainVideoNode by 5 seconds (5000 milliseconds)
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             mainVideoNode(frame, session);
-        }, 10000);
+        }, 30000);
     }
 
 
@@ -910,7 +921,7 @@ private TransformableNode checkBreathing(Frame frame, Session session) {
             }
             arFragment.getArSceneView().resume(); // Resume ARCore session
         }
-        // Additional ARCore setup if needed
+
     }
 
 
@@ -996,7 +1007,7 @@ private TransformableNode checkBreathing(Frame frame, Session session) {
     public void loadModels() {
         WeakReference<MainActivity> weakActivity = new WeakReference<>(this);
         ModelRenderable.builder()
-                .setSource(this, Uri.parse("file:///android_asset/cpr_model_mirror.glb")) // Update this line
+                .setSource(this, Uri.parse("file:///android_asset/cpr_big.glb")) // Update this line
                 .setIsFilamentGltf(true)
                 .setAsyncLoadEnabled(true)
                 .build()
@@ -1096,112 +1107,21 @@ private TransformableNode checkBreathing(Frame frame, Session session) {
             Toast.makeText(this, "Loading...", Toast.LENGTH_SHORT).show();
             return;
         }
-        int width = arFragment.getArSceneView().getWidth();
-        int height = arFragment.getArSceneView().getHeight();
 
-        // Now you can use the width and height
-        Log.d("ARFragment Dimensions", "Width: " + width + ", Height: " + height);
+
+
         // Create the Anchor.
         Anchor anchor = hitResult.createAnchor();
         AnchorNode anchorNode = new AnchorNode(anchor);
         anchorNode.setParent(arFragment.getArSceneView().getScene());
 
-        // Create the transformable model and add it to the anchor.
-        cpr = new TransformableNode(arFragment.getTransformationSystem());
-        cpr.setParent(anchorNode);
-
-        cpr.setRenderable(this.model3)
-
-                .animate(true)
-
-                .start();
+        TransformableNode modelNode = new TransformableNode(arFragment.getTransformationSystem());
+        modelNode.setParent(anchorNode);
 
 
-        cpr.select();
-//        TransformableNode modelNode = new TransformableNode(arFragment.getTransformationSystem());
-//        AnchorNode anchorNode2 = new AnchorNode(anchor);
-//        anchorNode2.setParent(arFragment.getArSceneView().getScene());
-//        modelNode.setWorldScale(new Vector3(1.3f, 1.3f, 1.3f));
-//        modelNode.setParent(anchorNode2);
-//
-//        final int rawResId;
-//        final Color chromaKeyColor;
-//        if (mode == R.id.menuPlainVideo) {
-//            rawResId = R.raw.mainvidnode;
-//            chromaKeyColor = null;
-//        } else {
-//            rawResId = R.raw.mainvidnode;
-//            chromaKeyColor = new Color(0.1843f, 1.0f, 0.098f);
-//        }
-//
-//        MediaPlayer player = MediaPlayer.create(this, rawResId);
-//        player.setLooping(false);  // Set looping to false, so it only plays once.
-//        player.start();  // Start playing the video
-//        mediaPlayers.add(player);
-//
-//        VideoNode videoNode = new VideoNode(this, player, chromaKeyColor, new VideoNode.Listener() {
-//            @Override
-//            public void onCreated(VideoNode videoNode) {
-//            }
-//
-//            @Override
-//            public void onError(Throwable throwable) {
-//                Toast.makeText(MainActivity.this, "Unable to load material", Toast.LENGTH_LONG).show();
-//            }
-//        });
-//        videoNode.setParent(modelNode);
-//
-//        // Optionally keep the video node always facing the camera
-//        // videoNode.setRotateAlwaysToCamera(true);
-//
-//        modelNode.select();
-
-
-
-//        Node titleNode = new Node();
-//        titleNode.setParent(model);
-//        titleNode.setEnabled(false);
-//        titleNode.setLocalPosition(new Vector3(0.0f, 1.0f, 0.0f));
-//        titleNode.setRenderable(viewRenderable);
-//        titleNode.setEnabled(true);
-
-        // Create the transformable model and add it to the anchor.
-//        TransformableNode modelNode = new TransformableNode(arFragment.getTransformationSystem());
-//        modelNode.setParent(anchorNode);
-//
-//        final int rawResId;
-//        final Color chromaKeyColor;
-//        if (mode == R.id.menuPlainVideo) {
-//            rawResId = R.raw.timer_16;
-//            chromaKeyColor = null;
-//        } else {
-//            rawResId = R.raw.timer_16_v2;
-//            chromaKeyColor = new Color(0.1843f, 1.0f, 0.098f);
-//        }
-//        MediaPlayer player = MediaPlayer.create(this, rawResId);
-//        player.setLooping(true);
-//        player.start();
-//        mediaPlayers.add(player);
-//        VideoNode videoNode = new VideoNode(this, player, chromaKeyColor, new VideoNode.Listener() {
-//            @Override
-//            public void onCreated(VideoNode videoNode) {
-//            }
-//
-//            @Override
-//            public void onError(Throwable throwable) {
-//                Toast.makeText(MainActivity.this, "Unable to load material", Toast.LENGTH_LONG).show();
-//            }
-//        });
-//        videoNode.setParent(modelNode);
-//
-//        // If you want that the VideoNode is always looking to the
-//        // Camera (You) comment the next line out. Use it mainly
-//        // if you want to display a Video. The use with activated
-//        // ChromaKey might look odd.
-//        //videoNode.setRotateAlwaysToCamera(true);
-//
-//        modelNode.select();
-
+        modelNode.setRenderable(this.model3)
+                .animate(true).start();
+        modelNode.select();
     }
 
 

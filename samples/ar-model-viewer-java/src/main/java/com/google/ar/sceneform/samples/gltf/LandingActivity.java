@@ -23,7 +23,7 @@ public class LandingActivity extends AppCompatActivity {
         });
 
         findViewById(R.id.practice_option).setOnClickListener(v -> {
-            Intent intent = new Intent(LandingActivity.this, MainActivity.class);
+            Intent intent = new Intent(LandingActivity.this, PracticeMode.class);
             startActivity(intent);
         });
 
