@@ -529,7 +529,8 @@ public class MainActivity extends AppCompatActivity implements
 
         // Delay the start of mainVideoNode by 5 seconds (5000 milliseconds)
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            mainVideoNode(frame, session);
+            //mainVideoNode(frame, session);
+            placeSpot(frame,session);
         }, 20000);
     }
 
