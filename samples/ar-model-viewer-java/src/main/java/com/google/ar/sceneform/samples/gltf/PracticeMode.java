@@ -143,6 +143,9 @@ public class PracticeMode extends AppCompatActivity implements
         ArFragment.OnViewCreatedListener{
     //        ImageReader.OnImageAvailableListener{
     private long startTime;
+    private Anchor existingAnchor;
+    private TransformableNode existingModelNode;
+    private Anchor newMarkAnchor;
     private TransformableNode mainVideoNode;
     private InputImage inputImage;
     private static final long WAIT_TIME_MS = 5000; // 5 seconds
@@ -175,7 +178,6 @@ public class PracticeMode extends AppCompatActivity implements
     private Size mPreviewSize;
     private TextToSpeech tts;
     private SpeechRecognizer speechRecognizer;
-    private TextView ttsTextView;
     private TextView geminiResponse;
     private Bitmap latestBitmap;
     private ImageView micButton;
@@ -558,7 +560,6 @@ public class PracticeMode extends AppCompatActivity implements
 
         setContentView(R.layout.activity_main);
         getSupportFragmentManager().addFragmentOnAttachListener(this);
-        ttsTextView = findViewById(R.id.ttsTextView);
         chatBodyContainer = findViewById(R.id.chatResponseLayout);
         chatModel = getChatModel();
         tts = new TextToSpeech(this, new TextToSpeech.OnInitListener() {
@@ -694,7 +695,6 @@ public class PracticeMode extends AppCompatActivity implements
             public void onError(int error) {
                 isListening = false;
                 micButton.setImageResource(R.drawable.mic_green);
-                ttsTextView.setText("Error: " + error);
             }
 
             @Override
@@ -702,24 +702,17 @@ public class PracticeMode extends AppCompatActivity implements
 
                 ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                 if (matches != null && !matches.isEmpty()) {
-                    ttsTextView.setText(matches.get(0));
                     userQueryFromSpeech = matches.get(0);
                     String query = userQueryFromSpeech;
                     //userQuery.setText("");
                     populateChatBody("You", query);
 
+               ;
 
                     GeminiPro.getResponse(chatModel, query, latestBitmap, new ResponseCallback() {
                         @Override
                         public void onResponse(String response) {
-                            if (response.contains("e")){
-                                try {
-                                    resumeARCore();
-                                } catch (Exception e) {
-                                    throw new RuntimeException(e);
-                                }
-                                heartAttackFunction();
-                            }
+
                             populateChatBody("Gemini", response);
                             tts.speak(response, TextToSpeech.QUEUE_ADD, null);
                         }
@@ -731,7 +724,6 @@ public class PracticeMode extends AppCompatActivity implements
                         }
                     });
                 } else {
-                    ttsTextView.setText("No speech recognized");
                 }
 
                 isListening = false;
@@ -957,22 +949,63 @@ public class PracticeMode extends AppCompatActivity implements
                 planeDepth
         };
     }
-    // This method will be called every frame
     private void onFrameUpdate(FrameTime frameTime) {
         Log.d("FrameUpdate", "A new frame has been rendered");
 
-        // Check if CPR node exists and is not already scheduled for removal
-        if (cpr != null && !isCPRScheduledForRemoval) {
-            isCPRScheduledForRemoval = true;
+        Session session = arFragment.getArSceneView().getSession();
+        Frame frame = arFragment.getArSceneView().getArFrame();
 
-            // Schedule the removal of the CPR node after 2 seconds
-            handler.postDelayed(() -> {
-                if (cpr != null) {
-                    cpr.setParent(null); // Remove the CPR node from the scene
-                    cpr = null; // Clear the reference
-                    Log.d("CPR Removal", "CPR node has been removed from the scene.");
+        // Ensure ARCore is tracking
+        if (frame.getCamera().getTrackingState() != TrackingState.TRACKING) {
+            Log.e("ARCore", "ARCore is not tracking.");
+            return;
+        }
+
+        if (existingAnchor == null) {
+            // If no anchor exists, create one
+            existingAnchor = session.createAnchor(
+                    frame.getCamera().getPose()
+                            .compose(com.google.ar.core.Pose.makeTranslation(0, 0.3f, -3f))
+                            .extractTranslation()
+            );
+
+            existingModelNode = new TransformableNode(arFragment.getTransformationSystem());
+            AnchorNode anchorNode = new AnchorNode(existingAnchor);
+            anchorNode.setParent(arFragment.getArSceneView().getScene());
+            existingModelNode.setParent(anchorNode);
+            existingModelNode.setWorldScale(new Vector3(1.8f, 1.8f, 1.8f));
+
+            final int rawResId;
+            final Color chromaKeyColor;
+            if (mode == R.id.menuPlainVideo) {
+                rawResId = R.raw.gif;
+                chromaKeyColor = null;
+            } else {
+                rawResId = R.raw.gif;
+                chromaKeyColor = new Color(0.1843f, 1.0f, 0.098f);
+            }
+
+            MediaPlayer player = MediaPlayer.create(this, rawResId);
+            player.setLooping(true);
+            player.start();
+            mediaPlayers.add(player);
+
+            VideoNode videoNode = new VideoNode(this, player, chromaKeyColor, new VideoNode.Listener() {
+                @Override
+                public void onCreated(VideoNode videoNode) {
                 }
-            }, 7000);
+
+                @Override
+                public void onError(Throwable throwable) {
+                    Toast.makeText(PracticeMode.this, "Unable to load material", Toast.LENGTH_LONG).show();
+                }
+            });
+            videoNode.setParent(existingModelNode);
+
+            existingModelNode.select();
+        } else {
+            // If the anchor already exists, do nothing (keep it where it is)
+            Log.d("FrameUpdate", "Anchor and model already exist, not moving them.");
         }
     }
 
@@ -1080,12 +1113,10 @@ public class PracticeMode extends AppCompatActivity implements
 
     @Override
     public void onTapPlane(HitResult hitResult, Plane plane, MotionEvent motionEvent) {
-        if (model == null || viewRenderable == null) {
+        if (model4 == null) {
             Toast.makeText(this, "Loading...", Toast.LENGTH_SHORT).show();
             return;
         }
-
-
 
         // Create the Anchor.
         Anchor anchor = hitResult.createAnchor();
@@ -1099,6 +1130,8 @@ public class PracticeMode extends AppCompatActivity implements
         modelNode.setRenderable(this.model4)
                 .animate(true).start();
         modelNode.select();
+
+
     }
 
 

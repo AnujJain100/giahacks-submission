@@ -30,6 +30,7 @@ import com.google.ar.core.TrackingState;
 import com.google.ar.core.exceptions.NotYetAvailableException;
 import com.google.ar.sceneform.FrameTime;
 import com.google.ar.sceneform.collision.Ray;
+import com.google.ar.sceneform.rendering.Texture;
 import com.google.ar.sceneform.ux.VideoNode;
 import com.google.ar.sceneform.rendering.Color;
 
@@ -202,14 +203,9 @@ public class MainActivity extends AppCompatActivity implements
     private LinearLayout chatBodyContainer;
     private ChatFutures chatModel;
     private HandlerThread handlerThread;
+
     private boolean arMode = false; // Track whether we're in AR mode
-    private static final SparseIntArray ORIENTATIONS = new SparseIntArray();
-    static {
-        ORIENTATIONS.append(Surface.ROTATION_0, 90);
-        ORIENTATIONS.append(Surface.ROTATION_90, 0);
-        ORIENTATIONS.append(Surface.ROTATION_180, 270);
-        ORIENTATIONS.append(Surface.ROTATION_270, 180);
-    }
+
     private TransformableNode cprGuy(Frame frame, Session session) {
         Anchor newMarkAnchor = session.createAnchor(
                 frame.getCamera().getPose()
@@ -498,29 +494,22 @@ public class MainActivity extends AppCompatActivity implements
             Log.e("ARCore", "ARCore is not tracking.");
             return;
         }
-        String query = "Point out any dangerous objects that are near the patient, point out any pillows or places to move the patient to a more comfortable sitting down position";
-        // Additional ARCore setup if needed
-        GeminiPro.getResponse(chatModel, query, latestBitmap, new ResponseCallback() {
-            @Override
-            public void onResponse(String response) {
-                if (response.contains("e")){
-                    try {
-                        resumeARCore();
-                    } catch (Exception e) {
-                        throw new RuntimeException(e);
-                    }
-                    heartAttackFunction();
-                }
-                populateChatBody("Gemini", response);
-                tts.speak(response, TextToSpeech.QUEUE_ADD, null);
-            }
-
-
-            @Override
-            public void onError(Throwable throwable) {
-                populateChatBody("Gemini", "Sorry, I'm having trouble understanding that. Please try again.");
-            }
-        });
+//        String query = "Point out any dangerous objects that are near the patient, point out any pillows or places to move the patient to a more comfortable sitting down position";
+//        // Additional ARCore setup if needed
+//        GeminiPro.getResponse(chatModel, query, latestBitmap, new ResponseCallback() {
+//            @Override
+//            public void onResponse(String response) {
+//
+//                populateChatBody("Gemini", response);
+//                tts.speak(response, TextToSpeech.QUEUE_ADD, null);
+//            }
+//
+//
+//            @Override
+//            public void onError(Throwable throwable) {
+//                populateChatBody("Gemini", "Sorry, I'm having trouble understanding that. Please try again.");
+//            }
+//        });
 //        //best settings for cpr guy
 //        Anchor newMarkAnchor = session.createAnchor(
 //                frame.getCamera().getPose()
@@ -541,7 +530,7 @@ public class MainActivity extends AppCompatActivity implements
         // Delay the start of mainVideoNode by 5 seconds (5000 milliseconds)
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             mainVideoNode(frame, session);
-        }, 30000);
+        }, 20000);
     }
 
 
@@ -581,7 +570,7 @@ public class MainActivity extends AppCompatActivity implements
 
         setContentView(R.layout.activity_main);
         getSupportFragmentManager().addFragmentOnAttachListener(this);
-        ttsTextView = findViewById(R.id.ttsTextView);
+        //ttsTextView = findViewById(R.id.ttsTextView);
         chatBodyContainer = findViewById(R.id.chatResponseLayout);
         chatModel = getChatModel();
         tts = new TextToSpeech(this, new TextToSpeech.OnInitListener() {
@@ -717,7 +706,7 @@ public class MainActivity extends AppCompatActivity implements
             public void onError(int error) {
                 isListening = false;
                 micButton.setImageResource(R.drawable.mic_green);
-                ttsTextView.setText("Error: " + error);
+                //ttsTextView.setText("Error: " + error);
             }
 
             @Override
@@ -725,7 +714,7 @@ public class MainActivity extends AppCompatActivity implements
 
                 ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                 if (matches != null && !matches.isEmpty()) {
-                    ttsTextView.setText(matches.get(0));
+                    //ttsTextView.setText(matches.get(0));
                     userQueryFromSpeech = matches.get(0);
                     String query = userQueryFromSpeech;
                     //userQuery.setText("");
@@ -735,7 +724,7 @@ public class MainActivity extends AppCompatActivity implements
                     GeminiPro.getResponse(chatModel, query, latestBitmap, new ResponseCallback() {
                         @Override
                         public void onResponse(String response) {
-                            if (response.contains("e")){
+                            if (response.contains("attack")){
                                 try {
                                     resumeARCore();
                                 } catch (Exception e) {
@@ -754,7 +743,7 @@ public class MainActivity extends AppCompatActivity implements
                         }
                     });
                 } else {
-                    ttsTextView.setText("No speech recognized");
+                    //ttsTextView.setText("No speech recognized");
                 }
 
                 isListening = false;
@@ -870,32 +859,32 @@ public class MainActivity extends AppCompatActivity implements
                         pose -> {
                             // Handle the pose object here
                             poseArrayList.add(pose);
-
-                            // Clear previous drawings
-                            if (canvas != null) {
-                                canvas.drawColor(android.graphics.Color.TRANSPARENT, PorterDuff.Mode.CLEAR);
-                            }
-
-                            // Drawing on Canvas
-                            if (bitmap != null && canvas != null) {
-                                Paint paint = new Paint();
-                                paint.setColor(android.graphics.Color.RED);
-                                paint.setStyle(Paint.Style.FILL);
-                                paint.setStrokeWidth(10);
-
-                                List<PoseLandmark> landmarks = pose.getAllPoseLandmarks();
-                                for (PoseLandmark landmark : landmarks) {
-                                    // Convert landmark coordinates to screen coordinates
-                                    int x = (int) (landmark.getPosition().x * previewView.getWidth() / image.getWidth());
-                                    int y = (int) (landmark.getPosition().y * previewView.getHeight() / image.getHeight());
-
-                                    // Draw a dot on the Canvas
-                                    canvas.drawCircle(x, y, 10, paint);
-                                }
-
-                                // Trigger a redraw
-                                previewView.postInvalidate();
-                            }
+//
+//                            // Clear previous drawings
+//                            if (canvas != null) {
+//                                canvas.drawColor(android.graphics.Color.TRANSPARENT, PorterDuff.Mode.CLEAR);
+//                            }
+//
+//                            // Drawing on Canvas
+//                            if (bitmap != null && canvas != null) {
+//                                Paint paint = new Paint();
+//                                paint.setColor(android.graphics.Color.RED);
+//                                paint.setStyle(Paint.Style.FILL);
+//                                paint.setStrokeWidth(10);
+//
+//                                List<PoseLandmark> landmarks = pose.getAllPoseLandmarks();
+//                                for (PoseLandmark landmark : landmarks) {
+//                                    // Convert landmark coordinates to screen coordinates
+//                                    int x = (int) (landmark.getPosition().x * previewView.getWidth() / image.getWidth());
+//                                    int y = (int) (landmark.getPosition().y * previewView.getHeight() / image.getHeight());
+//
+//                                    // Draw a dot on the Canvas
+//                                    canvas.drawCircle(x, y, 10, paint);
+//                                }
+//
+//                                // Trigger a redraw
+//                                previewView.postInvalidate();
+//                            }
 
                         })
                 .addOnFailureListener(
@@ -998,8 +987,6 @@ public class MainActivity extends AppCompatActivity implements
             }, 7000);
         }
     }
-
-
 
 
 
@@ -1122,6 +1109,8 @@ public class MainActivity extends AppCompatActivity implements
         modelNode.setRenderable(this.model3)
                 .animate(true).start();
         modelNode.select();
+
+
     }
 
 
@@ -1209,13 +1198,7 @@ public class MainActivity extends AppCompatActivity implements
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // Quit the handler thread
-        handlerThread.quitSafely();
-        try {
-            handlerThread.join();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+
         for (MediaPlayer mediaPlayer : this.mediaPlayers) {
             mediaPlayer.stop();
             mediaPlayer.reset();

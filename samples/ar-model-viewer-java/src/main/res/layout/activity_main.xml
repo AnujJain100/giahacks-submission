@@ -53,6 +53,8 @@
             android:src="@drawable/mic_green"/>
 
         <!-- ARCore Switch -->
+
+
         <Switch
             android:id="@+id/arcore_switch"
             android:layout_width="wrap_content"
@@ -64,16 +66,16 @@
             android:switchPadding="8dp"
             android:text="AR"/>
 
-        <!-- TTS TextView -->
-        <TextView
-            android:id="@+id/ttsTextView"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="bottom|center_horizontal"
-            android:padding="16dp"
-            android:text="@string/response_text"
-            android:textColor="@android:color/black"
-            android:textSize="18sp"/>
+<!--        &lt;!&ndash; TTS TextView &ndash;&gt;-->
+<!--        <TextView-->
+<!--            android:id="@+id/ttsTextView"-->
+<!--            android:layout_width="wrap_content"-->
+<!--            android:layout_height="wrap_content"-->
+<!--            android:layout_gravity="bottom|center_horizontal"-->
+<!--            android:padding="16dp"-->
+<!--            android:text="@string/response_text"-->
+<!--            android:textColor="@android:color/black"-->
+<!--            android:textSize="18sp"/>-->
 
         <!-- Gemini Response TextView -->
         <TextView
